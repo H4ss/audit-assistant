@@ -19,7 +19,7 @@ from paladin.util import dumps, loads, new_id, sha256_bytes, utcnow
 EXCERPT_CONTEXT = 8
 
 
-class ProposalRejected(ValueError):
+class ProposalRejectedError(ValueError):
     pass
 
 
@@ -32,7 +32,9 @@ class CodeExcerpt:
     highlight: set[int]
 
 
-def _repo_for(conn: sqlite3.Connection, finding: sqlite3.Row, file_ref: str, repo_name: str | None) -> tuple[dict | None, str]:
+def _repo_for(
+    conn: sqlite3.Connection, finding: sqlite3.Row, file_ref: str, repo_name: str | None
+) -> tuple[dict | None, str]:
     """Résout un fichier cité vers (dépôt autorisé, chemin relatif)."""
     repos = store.list_repos(conn, finding["campaign_id"])
     ref = file_ref.replace("\\", "/").lstrip("/")
@@ -98,37 +100,76 @@ def store_proposal(
     with store.transaction(conn):
         finding = conn.execute("SELECT * FROM finding WHERE id = ?", (finding_id,)).fetchone()
         if finding is None:
-            raise ProposalRejected(f"Finding inconnu : {finding_id}")
+            raise ProposalRejectedError(f"Finding inconnu : {finding_id}")
         if proposal.input_revision != finding["revision"]:
-            raise ProposalRejected(
+            raise ProposalRejectedError(
                 f"Proposition sur une révision périmée ({proposal.input_revision} ≠ {finding['revision']})."
             )
-        seq = conn.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM analysis WHERE finding_id = ?", (finding_id,)).fetchone()[0]
+        seq = conn.execute(
+            "SELECT COALESCE(MAX(seq), 0) + 1 FROM analysis WHERE finding_id = ?", (finding_id,)
+        ).fetchone()[0]
         aid = new_id()
         checked = []
         for ev in proposal.evidence:
             status, actual = check_reference(conn, finding, ev.model_dump())
             checked.append((ev, status, actual))
         checks = [{"file": ev.file, "line_start": ev.line_start, "status": st} for ev, st, _ in checked]
-        validation = {"schema": "ok", "references": checks,
-                      "all_references_verified": all(c["status"] == "verified" for c in checks) if checks else None}
+        validation = {
+            "schema": "ok",
+            "references": checks,
+            "all_references_verified": all(c["status"] == "verified" for c in checks) if checks else None,
+        }
         conn.execute(
             "INSERT INTO analysis (id, finding_id, job_id, seq, input_revision, proposed_verdict, summary,"
-            " suggested_comment, discussion_required, discussion_reason, payload_json, validation_json, model_requested,"
-            " model_provider, model_resolved, skill_version, software_version, context_version, is_simulated, created_at)"
+            " suggested_comment, discussion_required, discussion_reason, payload_json, validation_json,"
+            " model_requested,"
+            " model_provider, model_resolved, skill_version, software_version, context_version, is_simulated,"
+            " created_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (aid, finding_id, job_id, seq, proposal.input_revision, proposal.proposed_verdict.value, proposal.summary,
-             proposal.suggested_analysis_result_comment, int(proposal.discussion_required), proposal.discussion_reason,
-             dumps(proposal.model_dump(mode="json")), dumps(validation), model_requested, model_provider,
-             model_resolved or "unknown", skill_version, __version__, context_version, int(is_simulated), utcnow()),
+            (
+                aid,
+                finding_id,
+                job_id,
+                seq,
+                proposal.input_revision,
+                proposal.proposed_verdict.value,
+                proposal.summary,
+                proposal.suggested_analysis_result_comment,
+                int(proposal.discussion_required),
+                proposal.discussion_reason,
+                dumps(proposal.model_dump(mode="json")),
+                dumps(validation),
+                model_requested,
+                model_provider,
+                model_resolved or "unknown",
+                skill_version,
+                __version__,
+                context_version,
+                int(is_simulated),
+                utcnow(),
+            ),
         )
         for ev, status, actual in checked:
             conn.execute(
-                "INSERT INTO evidence (id, analysis_id, finding_id, repo_id, file_path, commit_sha, line_start, line_end,"
-                " excerpt, excerpt_sha256, note, reference_check, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (new_id(), aid, finding_id, None, ev.file, ev.commit, ev.line_start, ev.line_end,
-                 actual if actual is not None else ev.excerpt,
-                 sha256_bytes(actual.encode()) if actual else None, ev.note, status, utcnow()),
+                "INSERT INTO evidence (id, analysis_id, finding_id, repo_id, file_path, commit_sha, line_start,"
+                " line_end,"
+                " excerpt, excerpt_sha256, note, reference_check, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
+                " ?, ?, ?)",
+                (
+                    new_id(),
+                    aid,
+                    finding_id,
+                    None,
+                    ev.file,
+                    ev.commit,
+                    ev.line_start,
+                    ev.line_end,
+                    actual if actual is not None else ev.excerpt,
+                    sha256_bytes(actual.encode()) if actual else None,
+                    ev.note,
+                    status,
+                    utcnow(),
+                ),
             )
         conn.execute(
             "UPDATE finding SET processing_state = ?, updated_at = ? WHERE id = ?",
@@ -138,14 +179,17 @@ def store_proposal(
 
 
 def latest_analysis(conn: sqlite3.Connection, finding_id: str) -> dict[str, Any] | None:
-    row = conn.execute("SELECT * FROM analysis WHERE finding_id = ? ORDER BY seq DESC LIMIT 1", (finding_id,)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM analysis WHERE finding_id = ? ORDER BY seq DESC LIMIT 1", (finding_id,)
+    ).fetchone()
     if row is None:
         return None
     a = dict(row)
     a["payload"] = loads(a.pop("payload_json"), {})
     a["validation"] = loads(a.pop("validation_json"), {})
-    a["evidence"] = [dict(e) for e in conn.execute(
-        "SELECT * FROM evidence WHERE analysis_id = ? ORDER BY line_start", (a["id"],))]
+    a["evidence"] = [
+        dict(e) for e in conn.execute("SELECT * FROM evidence WHERE analysis_id = ? ORDER BY line_start", (a["id"],))
+    ]
     return a
 
 

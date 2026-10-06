@@ -15,7 +15,7 @@ from dataclasses import dataclass
 # ne pas forcer le schéma source/sink sur une règle sans flux de données).
 ROUTE_DATAFLOW = "dataflow"
 ROUTE_CRYPTO = "crypto"
-ROUTE_SECRET = "secret"
+ROUTE_SECRET = "secret"  # noqa: S105 — nom de route d'analyse, pas un secret
 ROUTE_CONFIG = "config"
 ROUTE_DEPENDENCY = "dependency"
 ROUTE_GENERIC = "generic"
@@ -52,23 +52,50 @@ FAMILIES: dict[str, Family] = {
 }
 
 _CWE_FAMILY: dict[int, str] = {
-    89: "sql_injection", 564: "sql_injection",
-    77: "command_injection", 78: "command_injection",
-    94: "code_injection", 95: "code_injection", 502: "code_injection",
-    79: "xss", 80: "xss", 83: "xss",
-    22: "path_traversal", 23: "path_traversal", 36: "path_traversal", 73: "path_traversal",
+    89: "sql_injection",
+    564: "sql_injection",
+    77: "command_injection",
+    78: "command_injection",
+    94: "code_injection",
+    95: "code_injection",
+    502: "code_injection",
+    79: "xss",
+    80: "xss",
+    83: "xss",
+    22: "path_traversal",
+    23: "path_traversal",
+    36: "path_traversal",
+    73: "path_traversal",
     918: "ssrf",
     601: "open_redirect",
-    117: "log_injection", 93: "log_injection",
+    117: "log_injection",
+    93: "log_injection",
     611: "xxe",
-    90: "ldap_xpath_injection", 643: "ldap_xpath_injection",
-    327: "weak_crypto", 328: "weak_crypto", 326: "weak_crypto", 916: "weak_crypto",
-    330: "insecure_random", 338: "insecure_random",
-    259: "hardcoded_secret", 798: "hardcoded_secret", 321: "hardcoded_secret",
-    1104: "vulnerable_dependency", 1395: "vulnerable_dependency", 937: "vulnerable_dependency",
-    693: "security_config", 1021: "security_config", 16: "security_config",
-    287: "authn_authz", 284: "authn_authz", 285: "authn_authz", 862: "authn_authz", 863: "authn_authz",
-    209: "error_handling", 200: "error_handling", 497: "error_handling",
+    90: "ldap_xpath_injection",
+    643: "ldap_xpath_injection",
+    327: "weak_crypto",
+    328: "weak_crypto",
+    326: "weak_crypto",
+    916: "weak_crypto",
+    330: "insecure_random",
+    338: "insecure_random",
+    259: "hardcoded_secret",
+    798: "hardcoded_secret",
+    321: "hardcoded_secret",
+    1104: "vulnerable_dependency",
+    1395: "vulnerable_dependency",
+    937: "vulnerable_dependency",
+    693: "security_config",
+    1021: "security_config",
+    16: "security_config",
+    287: "authn_authz",
+    284: "authn_authz",
+    285: "authn_authz",
+    862: "authn_authz",
+    863: "authn_authz",
+    209: "error_handling",
+    200: "error_handling",
+    497: "error_handling",
 }
 
 # Mots-clés évalués dans l'ordre (le plus spécifique d'abord).

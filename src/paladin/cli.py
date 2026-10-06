@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import socket
 import sys
@@ -26,10 +27,8 @@ LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 def _configure_stdio() -> None:
     # Consoles Windows en cp1252 : éviter les UnicodeEncodeError sur les accents.
     for stream in (sys.stdout, sys.stderr):
-        try:
+        with contextlib.suppress(AttributeError, ValueError):
             stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
-        except (AttributeError, ValueError):
-            pass
 
 
 def _home_arg(args: argparse.Namespace, demo: bool = False) -> Path:
@@ -77,9 +76,8 @@ def cmd_demo(args: argparse.Namespace) -> int:
         print(f"Démo {state} — données FICTIVES, propositions simulées (aucune connexion GLM).")
         if result.created:
             from paladin import store
-            from paladin.importers.pipeline import import_tool
-
             from paladin.demo import add_simulated_proposals
+            from paladin.importers.pipeline import import_tool
 
             for tool in store.list_tools(conn, result.campaign_id):
                 print_import_report(import_tool(settings, conn, result.campaign_id, tool["label"]))
@@ -89,7 +87,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
         conn.close()
     print(f"Espace de démo : {home}")
     print(f"Classeur cible : {result.workbook}")
-    print(f"Lancer l'interface : python -m paladin serve --home \"{home}\"")
+    print(f'Lancer l\'interface : python -m paladin serve --home "{home}"')
     return 0
 
 
@@ -122,7 +120,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
             home = demo_home
     _guard_home(home)
     if not (home / "paladin.toml").exists():
-        print(f"Espace absent : {home}\n→ Lancer `python -m paladin init` ou `python -m paladin demo`.", file=sys.stderr)
+        print(
+            f"Espace absent : {home}\n→ Lancer `python -m paladin init` ou `python -m paladin demo`.", file=sys.stderr
+        )
         return 2
     settings = load_settings(home)
     host = args.host or settings.host or DEFAULT_HOST
@@ -164,8 +164,9 @@ def cmd_start(args: argparse.Namespace) -> int:
             print()
         target = demo_home
         print("Espace de DÉMO (données fictives). Pour une vraie campagne : voir docs/GUIDE.md.")
-    return cmd_serve(argparse.Namespace(home=str(target), host=None, port=args.port, demo=False,
-                                        browser=not args.no_browser))
+    return cmd_serve(
+        argparse.Namespace(home=str(target), host=None, port=args.port, demo=False, browser=not args.no_browser)
+    )
 
 
 def cmd_campaign(args: argparse.Namespace) -> int:
@@ -234,7 +235,10 @@ def _open(args: argparse.Namespace, demo: bool = False):
 def print_import_report(report) -> None:
     print(report.summary())
     for src in report.sources:
-        print(f"  · {src.role} ({src.kind}) : {src.records} enregistrement(s), complétude {src.completeness} — {src.profile}")
+        print(
+            f"  · {src.role} ({src.kind}) : {src.records} enregistrement(s), complétude {src.completeness} —"
+            f" {src.profile}"
+        )
         for note in src.notes:
             print(f"      note : {note}")
         for part in src.unrecognized:
@@ -246,8 +250,12 @@ def print_import_report(report) -> None:
     if report.blocked:
         print(f"  ! BLOQUÉ : {report.blocked['message']}\n    → {report.blocked['action']}")
         if "proposal" in report.blocked:
-            print_proposal(report.blocked["proposal"], report.blocked.get("basis", {}),
-                           report.blocked.get("unmapped", []), report.blocked.get("missing", []))
+            print_proposal(
+                report.blocked["proposal"],
+                report.blocked.get("basis", {}),
+                report.blocked.get("unmapped", []),
+                report.blocked.get("missing", []),
+            )
 
 
 def print_proposal(mapping: dict, basis: dict, unmapped: list, missing: list) -> None:
@@ -285,8 +293,13 @@ def cmd_export(args: argparse.Namespace) -> int:
 
     settings, conn = _open(args)
     try:
-        result = export_workbook(settings, conn, args.campaign, mode="final" if args.final else "working_copy",
-                                 destination=Path(args.to).resolve() if args.to else None)
+        result = export_workbook(
+            settings,
+            conn,
+            args.campaign,
+            mode="final" if args.final else "working_copy",
+            destination=Path(args.to).resolve() if args.to else None,
+        )
     finally:
         conn.close()
     if result.status != "verified":
@@ -294,10 +307,15 @@ def cmd_export(args: argparse.Namespace) -> int:
         return 4
     s = result.summary
     print(f"Excel à jour : {result.destination}")
-    print(f"  cellules écrites {s['cells_written']}, lignes ajoutées {s['rows_appended']}, "
-          f"findings à jour {s['findings_up_to_date']}")
-    print(f"  bloqués {len(s['blocked'])}, sans cible {len(s['without_target'])}, "
-          f"lignes Excel non appariées {len(s['unmatched_rows'])}, valeurs humaines conservées {len(s['preserved_human_values'])}")
+    print(
+        f"  cellules écrites {s['cells_written']}, lignes ajoutées {s['rows_appended']}, "
+        f"findings à jour {s['findings_up_to_date']}"
+    )
+    print(
+        f"  bloqués {len(s['blocked'])}, sans cible {len(s['without_target'])}, "
+        f"lignes Excel non appariées {len(s['unmatched_rows'])}, valeurs humaines conservées"
+        f" {len(s['preserved_human_values'])}"
+    )
     for b in s["blocked"]:
         print(f"    BLOQUÉ {b['sheet']} {b['source_id']} : {b['reason']}")
     if s["tools_without_sheet"]:
@@ -328,7 +346,10 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     else:
         print(f"Format non pris en charge : {suffix}. Formats : xlsx, csv, md, sarif.")
         return 2
-    print(f"{path.name} : {len(read.records)} enregistrement(s), {len(read.field_names)} champ(s), complétude {read.completeness.value}")
+    print(
+        f"{path.name} : {len(read.records)} enregistrement(s), {len(read.field_names)} champ(s), complétude"
+        f" {read.completeness.value}"
+    )
     for part in read.unrecognized:
         print(f"  NON RECONNU {part.locator} : {part.reason}")
     prop = propose_mapping(read.field_names, read.records)
@@ -340,7 +361,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 def cmd_profile(args: argparse.Namespace) -> int:
     from paladin.importers import profiles
 
-    settings, conn = _open(args)
+    _settings, conn = _open(args)
     try:
         if args.action == "list":
             for p in profiles.list_profiles(conn, args.campaign):
@@ -404,7 +425,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_import)
     p = add("export", "Exporter les décisions validées vers l'Excel.")
     p.add_argument("--campaign", default="demo")
-    p.add_argument("--final", action="store_true", help="Mettre à jour le classeur cible désigné (sinon copie de travail).")
+    p.add_argument(
+        "--final", action="store_true", help="Mettre à jour le classeur cible désigné (sinon copie de travail)."
+    )
     p.add_argument("--to", help="Destination explicite.")
     p.set_defaults(func=cmd_export)
     p = sub.add_parser("inspect", help="Détecter les champs d'un rapport et proposer un mapping (multi-entrées).")

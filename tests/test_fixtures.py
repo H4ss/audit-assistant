@@ -32,7 +32,7 @@ def test_fortify_locations_exist_in_demo_repos():
     for issue in _issues(10042):
         full = issue["fullFileName"]
         root = next(r for r in roots if full.startswith(r))
-        path = roots[root] / full[len(root):]
+        path = roots[root] / full[len(root) :]
         assert path.is_file(), full
         if issue["lineNumber"] is not None:
             lines = path.read_text(encoding="utf-8").splitlines()
@@ -42,7 +42,10 @@ def test_fortify_locations_exist_in_demo_repos():
 
 def test_fortify_version_selection_cases_present():
     def names(app_id):
-        return [v["name"] for v in json.loads((ROOT / "fortify" / f"versions_{app_id}.json").read_text(encoding="utf-8"))["data"]]
+        return [
+            v["name"]
+            for v in json.loads((ROOT / "fortify" / f"versions_{app_id}.json").read_text(encoding="utf-8"))["data"]
+        ]
 
     assert names(501).count("release") == 1  # cas nominal
     assert names(502).count("release") == 0  # absente : blocage attendu

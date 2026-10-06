@@ -11,7 +11,7 @@ import sqlite3
 from importlib import resources
 from pathlib import Path
 
-from paladin.util import sha256_bytes, utcnow
+from paladin.util import file_stamp, sha256_bytes, utcnow
 
 _MIGRATIONS_PACKAGE = "paladin.db.migrations"
 
@@ -54,7 +54,7 @@ def applied_versions(conn: sqlite3.Connection) -> dict[int, str]:
 
 
 def _backup(conn: sqlite3.Connection, db_path: Path, version: int) -> Path:
-    stamp = utcnow().replace(":", "").replace("-", "").replace(".", "")[:15]
+    stamp = file_stamp()
     target = db_path.with_name(f"{db_path.name}.bak-{version:04d}-{stamp}")
     dest = sqlite3.connect(target)
     try:

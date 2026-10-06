@@ -20,6 +20,7 @@ Disposition d'un espace :
 
 from __future__ import annotations
 
+import contextlib
 import os
 import secrets
 import sys
@@ -116,10 +117,8 @@ def _read_or_create_token(path: Path) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(32)
     path.write_text(token, encoding="utf-8")
-    try:
+    with contextlib.suppress(OSError):  # Windows : ACL héritées du profil utilisateur
         path.chmod(0o600)
-    except OSError:  # Windows : ACL héritées du profil utilisateur
-        pass
     return token
 
 

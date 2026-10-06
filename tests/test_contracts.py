@@ -22,7 +22,7 @@ SPEC_EXAMPLE = {
 
 
 def test_excel_result_has_exactly_two_values():
-    assert c.EXCEL_ANALYSIS_RESULT_VALUES == {"True Positive", "Not an issue"}
+    assert {"True Positive", "Not an issue"} == c.EXCEL_ANALYSIS_RESULT_VALUES
     assert c.verdict_to_excel(c.Verdict.TRUE_POSITIVE) == "True Positive"
     assert c.verdict_to_excel(c.Verdict.NOT_AN_ISSUE) == "Not an issue"
     assert c.verdict_to_excel(c.Verdict.NEEDS_REVIEW) is None
@@ -35,8 +35,14 @@ def test_discussion_comment_is_exact():
 
 @pytest.mark.parametrize(
     "raw,expected",
-    [("TP", c.Verdict.TRUE_POSITIVE), ("fp", c.Verdict.NOT_AN_ISSUE), ("False Positive", c.Verdict.NOT_AN_ISSUE),
-     ("Not an issue", c.Verdict.NOT_AN_ISSUE), ("true-positive", c.Verdict.TRUE_POSITIVE), ("needs_review", c.Verdict.NEEDS_REVIEW)],
+    [
+        ("TP", c.Verdict.TRUE_POSITIVE),
+        ("fp", c.Verdict.NOT_AN_ISSUE),
+        ("False Positive", c.Verdict.NOT_AN_ISSUE),
+        ("Not an issue", c.Verdict.NOT_AN_ISSUE),
+        ("true-positive", c.Verdict.TRUE_POSITIVE),
+        ("needs_review", c.Verdict.NEEDS_REVIEW),
+    ],
 )
 def test_legacy_verdicts_normalized(raw, expected):
     assert c.normalize_verdict(raw) == expected
@@ -50,16 +56,31 @@ def test_unknown_verdict_rejected():
 def test_default_columns_match_contract():
     headers = [col.header for col in c.DEFAULT_COLUMNS]
     assert headers == [
-        "Application name", "Version name", "Category", "Primary location", "Line number", "Full filename",
-        "Criticality", "Commentaires", "Analyzer", "Primary rule ID", "Instance ID", "Fortify Category", "CWE",
-        "analysis result", "Analysis result comment",
+        "Application name",
+        "Version name",
+        "Category",
+        "Primary location",
+        "Line number",
+        "Full filename",
+        "Criticality",
+        "Commentaires",
+        "Analyzer",
+        "Primary rule ID",
+        "Instance ID",
+        "Fortify Category",
+        "CWE",
+        "analysis result",
+        "Analysis result comment",
     ]
-    assert c.ANALYST_KEYS == {"analyst_result", "analyst_comment"}
+    assert {"analyst_result", "analyst_comment"} == c.ANALYST_KEYS
     assert c.found_in_header("ToolB") == "Found in ToolB"
     assert c.criticality_in_header("ToolB") == "criticality in ToolB"
 
 
-@pytest.mark.parametrize("raw,expected", [("79", "CWE-79"), ("CWE-89", "CWE-89"), ("cwe 22", "CWE-22"), ("CWE ID 117", "CWE-117"), ("XSS", None)])
+@pytest.mark.parametrize(
+    "raw,expected",
+    [("79", "CWE-79"), ("CWE-89", "CWE-89"), ("cwe 22", "CWE-22"), ("CWE ID 117", "CWE-117"), ("XSS", None)],
+)
 def test_cwe_normalization(raw, expected):
     assert c.normalize_cwe(raw) == expected
 

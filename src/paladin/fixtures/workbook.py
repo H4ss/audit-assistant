@@ -41,11 +41,31 @@ TOOLB_HEADERS = [
 TOOLB_ROWS = [
     ("TB-0001", "ShopApp", "TB.SQLI.001", "shop-api/app/orders.py", 12, "High", "CWE-89", None, None),
     ("TB-0002", "ShopApp", "TB.SQLI.001", "shop-api/app/products.py", 11, "High", "CWE-89", None, None),
-    ("TB-0003", "ShopApp", "TB.XSS.004", "shop-api/app/search.py", 7, "High", "CWE-79", None, "voir avec l'équipe front"),
+    (
+        "TB-0003",
+        "ShopApp",
+        "TB.XSS.004",
+        "shop-api/app/search.py",
+        7,
+        "High",
+        "CWE-79",
+        None,
+        "voir avec l'équipe front",
+    ),
     ("TB-0004", "ShopApp", "TB.XSS.004", "shop-api/app/search.py", 12, "Medium", "CWE-79", None, None),
     ("TB-0005", "ShopApp", "TB.LOG.002", "shop-api/app/logging_utils.py", 7, "Medium", "CWE-117", None, None),
     ("TB-0006", "ShopApp", "TB.RAND.001", "billing-lib/billing/tokens.py", 8, "High", "CWE-338", None, None),
-    ("TB-0007", "ShopApp", "TB.REDIR.002", "shop-api/app/orders.py", 18, "Low", "CWE-601", "Import ToolB 2026-09", None),
+    (
+        "TB-0007",
+        "ShopApp",
+        "TB.REDIR.002",
+        "shop-api/app/orders.py",
+        18,
+        "Low",
+        "CWE-601",
+        "Import ToolB 2026-09",
+        None,
+    ),
     ("TB-0008", "ShopApp", "TB.CRYPTO.007", "billing-lib/billing/hashing.py", 7, "Low", "CWE-328", None, None),
 ]
 

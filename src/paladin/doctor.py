@@ -42,9 +42,17 @@ def check_python() -> Check:
     v = sys.version_info[:2]
     detail = f"Python {platform.python_version()} ({sys.executable})"
     if v < MIN_PYTHON:
-        return Check("système", "python", Status.BLOCK, detail, f"Installer Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ (référence 3.14).")
+        return Check(
+            "système",
+            "python",
+            Status.BLOCK,
+            detail,
+            f"Installer Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ (référence 3.14).",
+        )
     if v != REFERENCE_PYTHON:
-        return Check("système", "python", Status.WARN, detail, "Version prise en charge mais différente de la référence 3.14.")
+        return Check(
+            "système", "python", Status.WARN, detail, "Version prise en charge mais différente de la référence 3.14."
+        )
     return Check("système", "python", Status.OK, detail)
 
 
@@ -61,7 +69,9 @@ def check_home(settings: Settings) -> Check:
         probe.write_text("ok", encoding="utf-8")
         probe.unlink()
     except OSError as exc:
-        return Check("données", "dossier", Status.BLOCK, f"{home} non inscriptible : {exc}", "Vérifier les droits du dossier.")
+        return Check(
+            "données", "dossier", Status.BLOCK, f"{home} non inscriptible : {exc}", "Vérifier les droits du dossier."
+        )
     return Check("données", "dossier", Status.OK, str(home))
 
 
@@ -76,13 +86,22 @@ def check_database(settings: Settings) -> Check:
     expected = {v for v, _, _ in available_migrations()}
     missing = sorted(expected - set(done))
     if missing:
-        return Check("données", "base", Status.WARN, f"Migrations en attente : {missing}", "Lancer `python -m paladin init` (sauvegarde automatique).")
+        return Check(
+            "données",
+            "base",
+            Status.WARN,
+            f"Migrations en attente : {missing}",
+            "Lancer `python -m paladin init` (sauvegarde automatique).",
+        )
     return Check("données", "base", Status.OK, f"{settings.db_path} — schéma v{max(expected)}")
 
 
 def _run(cmd: list[str], timeout: int = 20) -> tuple[int, str]:
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
+        # Exécutable résolu par shutil.which, arguments fixes, sans shell.
+        proc = subprocess.run(  # noqa: S603
+            cmd, capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace"
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 1, str(exc)
     return proc.returncode, (proc.stdout + proc.stderr).strip()
@@ -92,13 +111,22 @@ def check_opencode(settings: Settings) -> Check:
     exe = shutil.which("opencode")
     if not exe:
         return Check(
-            "agent", "opencode", Status.WARN, "OpenCode introuvable dans le PATH",
+            "agent",
+            "opencode",
+            Status.WARN,
+            "OpenCode introuvable dans le PATH",
             "Installer OpenCode (mode sans LLM toujours disponible : consultation, décisions manuelles, export).",
         )
     code, out = _run([exe, "--version"])
     version = out.splitlines()[0].split()[-1].lstrip("v") if out else "inconnue"
     if code != 0:
-        return Check("agent", "opencode", Status.WARN, f"{exe} : version illisible ({version})", "Vérifier l'installation OpenCode.")
+        return Check(
+            "agent",
+            "opencode",
+            Status.WARN,
+            f"{exe} : version illisible ({version})",
+            "Vérifier l'installation OpenCode.",
+        )
     model = settings.agent.get("model_requested", "glm-latest")
     provider = settings.agent.get("provider") or "non renseigné"
     return Check("agent", "opencode", Status.OK, f"{exe} v{version} — modèle demandé {model}, fournisseur {provider}")
@@ -108,13 +136,28 @@ def check_fortify(settings: Settings) -> Check:
     url = settings.fortify.get("url", "")
     if not url:
         return Check(
-            "fortify", "configuration", Status.WARN, "Configuration bloquée : URL Fortify absente",
+            "fortify",
+            "configuration",
+            Status.WARN,
+            "Configuration bloquée : URL Fortify absente",
             "Renseigner [fortify] dans paladin.toml sur le PC de travail. Les campagnes MD/Excel restent utilisables.",
         )
     token_env = settings.fortify.get("token_env", "PALADIN_FORTIFY_TOKEN")
     if not os.environ.get(token_env):
-        return Check("fortify", "configuration", Status.WARN, f"Jeton absent ({token_env})", f"Définir la variable {token_env} (jamais dans Git).")
-    return Check("fortify", "configuration", Status.WARN, "Configurée mais non vérifiée", "Le diagnostic API détaillé arrive au palier P4.")
+        return Check(
+            "fortify",
+            "configuration",
+            Status.WARN,
+            f"Jeton absent ({token_env})",
+            f"Définir la variable {token_env} (jamais dans Git).",
+        )
+    return Check(
+        "fortify",
+        "configuration",
+        Status.WARN,
+        "Configurée mais non vérifiée",
+        "Le diagnostic API détaillé arrive au palier P4.",
+    )
 
 
 def run_checks(settings: Settings) -> list[Check]:
@@ -146,5 +189,10 @@ def write_report(settings: Settings, checks: list[Check]) -> Path:
     reports = settings.home / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     path = reports / "doctor-latest.json"
-    path.write_text(json.dumps({"generated_at": utcnow(), "version": __version__, "checks": to_dicts(checks)}, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {"generated_at": utcnow(), "version": __version__, "checks": to_dicts(checks)}, indent=2, ensure_ascii=False
+        ),
+        encoding="utf-8",
+    )
     return path

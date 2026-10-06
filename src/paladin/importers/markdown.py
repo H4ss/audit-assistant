@@ -177,15 +177,27 @@ def _read_heading_kv(path: Path, text: str, options: dict[str, Any]) -> SourceRe
             close()
             leftover = [ln for ln in s.lines if ln.text.strip() and not _KV_BULLET_RE.match(ln.text)]
             if s.level > 1 and leftover:
-                unrecognized.append(UnrecognizedPart(_locator(path, s.start, s.end_no, _end_offset(all_lines, s.end_no)), "section hors profil", s.title))
+                unrecognized.append(
+                    UnrecognizedPart(
+                        _locator(path, s.start, s.end_no, _end_offset(all_lines, s.end_no)),
+                        "section hors profil",
+                        s.title,
+                    )
+                )
             continue
         if s.level == finding_level:
             close()
             m = id_re.match(s.title)
             loc = _locator(path, s.start, s.end_no, _end_offset(all_lines, s.end_no))
             if m:
-                current = {"section": s, "id": m.group("id"), "title": m.group("title").strip(),
-                           "kv": _kv_bullets(s.lines), "subs": {}, "end_no": s.end_no}
+                current = {
+                    "section": s,
+                    "id": m.group("id"),
+                    "title": m.group("title").strip(),
+                    "kv": _kv_bullets(s.lines),
+                    "subs": {},
+                    "end_no": s.end_no,
+                }
             elif _ignored(s.title, options):
                 ignored.append(UnrecognizedPart(loc, "section ignorée par le profil", s.title))
             else:
@@ -196,7 +208,13 @@ def _read_heading_kv(path: Path, text: str, options: dict[str, Any]) -> SourceRe
             current["subs"][s.title] = s.body()
             current["end_no"] = s.end_no
         else:
-            unrecognized.append(UnrecognizedPart(_locator(path, s.start, s.end_no, _end_offset(all_lines, s.end_no)), "sous-section orpheline", s.title))
+            unrecognized.append(
+                UnrecognizedPart(
+                    _locator(path, s.start, s.end_no, _end_offset(all_lines, s.end_no)),
+                    "sous-section orpheline",
+                    s.title,
+                )
+            )
     close()
     read = SourceRead(kind="md", records=records, field_names=field_names, unrecognized=unrecognized, ignored=ignored)
     read.scope.update(defaults)
@@ -260,7 +278,13 @@ def _read_table(path: Path, text: str, options: dict[str, Any]) -> SourceRead:
                 cells = _split_row(row.text)
                 loc = _locator(path, row, row.no, _end_offset(all_lines, row.no))
                 if len(cells) != len(headers):
-                    unrecognized.append(UnrecognizedPart(loc, f"ligne de tableau mal formée ({len(cells)} cellules pour {len(headers)} colonnes)", row.text[:200]))
+                    unrecognized.append(
+                        UnrecognizedPart(
+                            loc,
+                            f"ligne de tableau mal formée ({len(cells)} cellules pour {len(headers)} colonnes)",
+                            row.text[:200],
+                        )
+                    )
                 else:
                     fields = {h: (c if c else None) for h, c in zip(headers, cells, strict=True) if h}
                     records.append(RawRecord(fields=fields, locator=loc, defaults=dict(defaults)))

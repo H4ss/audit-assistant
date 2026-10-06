@@ -30,7 +30,7 @@ def _rows_to_read(rows: list[list[Any]], locator_prefix: str, kind: str, first_r
         raise TabularError("Aucune ligne d'en-têtes reconnue dans les premières lignes.")
     raw_headers = rows[header_idx]
     headers: list[str] = []
-    for i, h in enumerate(raw_headers):
+    for h in raw_headers:
         name = str(h).strip() if h not in (None, "") else ""
         if name and name in headers:
             raise TabularError(f"En-tête en double : {name!r}. → Renommer la colonne dans la source.")
@@ -44,7 +44,9 @@ def _rows_to_read(rows: list[list[Any]], locator_prefix: str, kind: str, first_r
         fields = {h: (row[i] if i < len(row) else None) for i, h in enumerate(headers) if h}
         stray = [row[i] for i in range(len(row)) if (i >= len(headers) or not headers[i]) and row[i] not in (None, "")]
         if stray:
-            unrecognized.append(UnrecognizedPart(f"{locator_prefix}R{rownum}", "valeurs hors colonnes nommées", str(stray)[:200]))
+            unrecognized.append(
+                UnrecognizedPart(f"{locator_prefix}R{rownum}", "valeurs hors colonnes nommées", str(stray)[:200])
+            )
         records.append(RawRecord(fields=fields, locator=f"{locator_prefix}R{rownum}"))
     read = SourceRead(kind=kind, records=records, field_names=[h for h in headers if h], unrecognized=unrecognized)
     read.notes.append(f"En-têtes en ligne {first_row_number + header_idx}")

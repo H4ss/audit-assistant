@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 
 import pytest
-from openpyxl import Workbook, load_workbook
+from openpyxl import Workbook
+from tests.conftest import finding_by_source
 
 from paladin.classify import classify
 from paladin.contracts import Completeness, ReviewState
@@ -15,7 +16,6 @@ from paladin.importers.markdown import read_markdown
 from paladin.importers.pipeline import import_tool
 from paladin.importers.sarif import SARIF_MAPPING, read_sarif
 from paladin.importers.tabular import read_csv, read_excel
-from tests.conftest import finding_by_source
 
 ROOT = fixtures_root()
 
@@ -72,10 +72,12 @@ def _write_csv(path: Path, text: str) -> Path:
 
 
 def test_french_csv_mapping_inference(tmp_path):
-    p = _write_csv(tmp_path / "toold.csv",
-                   "Référence;Titre;Gravité;Emplacement;Règle;CWE;Commentaires;analysis result\n"
-                   "D-1;Injection SQL;Haute;shop-api/app/orders.py:12;SQLI-1;CWE-89;vu en revue;\n"
-                   "D-2;XSS;Moyenne;shop-api/app/search.py:7;XSS-2;79;;\n")
+    p = _write_csv(
+        tmp_path / "toold.csv",
+        "Référence;Titre;Gravité;Emplacement;Règle;CWE;Commentaires;analysis result\n"
+        "D-1;Injection SQL;Haute;shop-api/app/orders.py:12;SQLI-1;CWE-89;vu en revue;\n"
+        "D-2;XSS;Moyenne;shop-api/app/search.py:7;XSS-2;79;;\n",
+    )
     read = read_csv(p)
     prop = propose_mapping(read.field_names, read.records)
     f = prop.fields
@@ -116,12 +118,41 @@ def test_separate_competitor_excel(tmp_path):
 
 
 def test_sarif_reader(tmp_path):
-    doc = {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "ToolS", "rules": [
-        {"id": "py/sql-injection", "name": "SqlInjection", "properties": {"tags": ["security", "external/cwe/cwe-089"]}}]}},
-        "results": [{"ruleId": "py/sql-injection", "level": "error", "message": {"text": "SQLi"},
-                     "partialFingerprints": {"primaryLocationLineHash": "abc"},
-                     "locations": [{"physicalLocation": {"artifactLocation": {"uri": "shop-api/app/orders.py"},
-                                                         "region": {"startLine": 12}}}]}]}]}
+    doc = {
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "ToolS",
+                        "rules": [
+                            {
+                                "id": "py/sql-injection",
+                                "name": "SqlInjection",
+                                "properties": {"tags": ["security", "external/cwe/cwe-089"]},
+                            }
+                        ],
+                    }
+                },
+                "results": [
+                    {
+                        "ruleId": "py/sql-injection",
+                        "level": "error",
+                        "message": {"text": "SQLi"},
+                        "partialFingerprints": {"primaryLocationLineHash": "abc"},
+                        "locations": [
+                            {
+                                "physicalLocation": {
+                                    "artifactLocation": {"uri": "shop-api/app/orders.py"},
+                                    "region": {"startLine": 12},
+                                }
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
     p = tmp_path / "r.sarif"
     p.write_text(json.dumps(doc), encoding="utf-8")
     read = read_sarif(p)
@@ -191,7 +222,12 @@ def test_fortify_import_keeps_both_categories_and_release_id(demo):
     assert demo["conn"].execute("SELECT COUNT(*) FROM finding WHERE source_id LIKE 'EEEE%'").fetchone()[0] == 0  # dev
     no_line = finding_by_source(demo["conn"], "FFFFFFFFFFFFFFFFFFFFFFFF00900013")
     assert no_line["line_number"] is None
-    assert json.loads(finding_by_source(demo["conn"], "FFFFFFFFFFFFFFFFFFFFFFFF00900003")["details_json"])["trace_available"] is False
+    assert (
+        json.loads(finding_by_source(demo["conn"], "FFFFFFFFFFFFFFFFFFFFFFFF00900003")["details_json"])[
+            "trace_available"
+        ]
+        is False
+    )
 
 
 def test_absent_release_blocks_import(demo):
@@ -214,8 +250,12 @@ def test_excel_md_counters_and_divergence(demo):
     conn = demo["conn"]
     tb3 = finding_by_source(conn, "TB-0003")
     assert json.loads(tb3["divergent_fields_json"]) == ["criticality_raw"]
-    values = {row["value_json"] for row in conn.execute(
-        "SELECT value_json FROM field_value WHERE finding_id = ? AND field = 'criticality_raw'", (tb3["id"],))}
+    values = {
+        row["value_json"]
+        for row in conn.execute(
+            "SELECT value_json FROM field_value WHERE finding_id = ? AND field = 'criticality_raw'", (tb3["id"],)
+        )
+    }
     assert values == {'"High"', '"Critical"'}  # les deux valeurs originales conservées
     assert tb3["category"] == "Reflected cross-site scripting"  # enrichie par le MD
     tb9 = json.loads(finding_by_source(conn, "TB-0009")["details_json"])
@@ -239,7 +279,9 @@ def test_changed_source_marks_validated_finding_for_reexam(demo, tmp_path):
 
     conn, settings = demo["conn"], demo["settings"]
     f = finding_by_source(conn, "TB-0001")
-    record_decision(conn, f["id"], expected_revision=f["revision"], action="accept", author="me", verdict="TRUE_POSITIVE")
+    record_decision(
+        conn, f["id"], expected_revision=f["revision"], action="accept", author="me", verdict="TRUE_POSITIVE"
+    )
     md = settings.campaign_dir("demo") / "inputs" / "toolb" / "toolb_details.md"
     md.write_text(md.read_text(encoding="utf-8").replace("- **Line**: 12", "- **Line**: 13", 1), encoding="utf-8")
     r = import_tool(settings, conn, "demo", "ToolB")
@@ -251,14 +293,37 @@ def test_changed_source_marks_validated_finding_for_reexam(demo, tmp_path):
 
 def test_same_id_different_content_is_a_collision_not_a_merge(settings, conn, tmp_path):
     from paladin import store
-    from paladin.util import utcnow
 
     md = tmp_path / "dup.md"
-    md.write_text("| Ref | Check | Location |\n|---|---|---|\n| X-1 | a | f.py:1 |\n| X-1 | b | g.py:2 |\n", encoding="utf-8")
-    cfg = {"id": "c", "target_workbook": "none.xlsx", "tools": [{"label": "ToolX", "kind": "md", "sheet_name": None,
-           "sources": [{"role": "findings", "kind": "md", "path": str(md), "profile": "table-v1",
-                        "mapping": {"fields": {"source_id": {"source": "Ref"}, "category": {"source": "Check"},
-                                               "full_filename": {"source": "Location", "transform": "location_path"}}}}]}]}
+    md.write_text(
+        "| Ref | Check | Location |\n|---|---|---|\n| X-1 | a | f.py:1 |\n| X-1 | b | g.py:2 |\n", encoding="utf-8"
+    )
+    cfg = {
+        "id": "c",
+        "target_workbook": "none.xlsx",
+        "tools": [
+            {
+                "label": "ToolX",
+                "kind": "md",
+                "sheet_name": None,
+                "sources": [
+                    {
+                        "role": "findings",
+                        "kind": "md",
+                        "path": str(md),
+                        "profile": "table-v1",
+                        "mapping": {
+                            "fields": {
+                                "source_id": {"source": "Ref"},
+                                "category": {"source": "Check"},
+                                "full_filename": {"source": "Location", "transform": "location_path"},
+                            }
+                        },
+                    }
+                ],
+            }
+        ],
+    }
     store.create_campaign(conn, "c", "c", cfg)
     store.add_tool(conn, "c", "ToolX", "md", None)
     r = import_tool(settings, conn, "c", "ToolX")
@@ -271,11 +336,32 @@ def test_fingerprint_identity_without_native_id(settings, conn, tmp_path):
 
     md = tmp_path / "noid.md"
     md.write_text("| Check | Location |\n|---|---|\n| weak-hash | a.py:3 |\n", encoding="utf-8")
-    cfg = {"id": "c2", "target_workbook": "none.xlsx", "tools": [{"label": "ToolY", "kind": "md", "sheet_name": None,
-           "sources": [{"role": "findings", "kind": "md", "path": str(md), "profile": "table-v1",
-                        "mapping": {"fields": {"category": {"source": "Check"},
-                                               "full_filename": {"source": "Location", "transform": "location_path"},
-                                               "line_number": {"source": "Location", "transform": "location_line"}}}}]}]}
+    cfg = {
+        "id": "c2",
+        "target_workbook": "none.xlsx",
+        "tools": [
+            {
+                "label": "ToolY",
+                "kind": "md",
+                "sheet_name": None,
+                "sources": [
+                    {
+                        "role": "findings",
+                        "kind": "md",
+                        "path": str(md),
+                        "profile": "table-v1",
+                        "mapping": {
+                            "fields": {
+                                "category": {"source": "Check"},
+                                "full_filename": {"source": "Location", "transform": "location_path"},
+                                "line_number": {"source": "Location", "transform": "location_line"},
+                            }
+                        },
+                    }
+                ],
+            }
+        ],
+    }
     store.create_campaign(conn, "c2", "c2", cfg)
     store.add_tool(conn, "c2", "ToolY", "md", None)
     import_tool(settings, conn, "c2", "ToolY")
@@ -287,7 +373,10 @@ def test_fingerprint_identity_without_native_id(settings, conn, tmp_path):
 def test_unvalidated_source_is_blocked_with_persisted_proposal(demo):
     r = demo["reports"]["ToolC"]
     assert r.blocked and r.new == 0
-    assert demo["conn"].execute("SELECT status FROM input_profile WHERE id = ?", (r.blocked["profile_id"],)).fetchone()[0] == "proposed"
+    assert (
+        demo["conn"].execute("SELECT status FROM input_profile WHERE id = ?", (r.blocked["profile_id"],)).fetchone()[0]
+        == "proposed"
+    )
 
 
 def test_prompt_injection_in_md_is_inert_data(demo):

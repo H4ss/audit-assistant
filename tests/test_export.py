@@ -1,16 +1,12 @@
 """Export Excel : valeurs exactes, préservation, verrous, conflits, périmé."""
 
-import os
-import shutil
-
-import pytest
 from openpyxl import load_workbook
 from openpyxl.chart import BarChart, Reference
+from tests.conftest import finding_by_source
 
 from paladin.contracts import DISCUSSION_COMMENT, ExportState
 from paladin.excel import export as ex
 from paladin.review import decisions as d
-from tests.conftest import finding_by_source
 
 F1 = "FFFFFFFFFFFFFFFFFFFFFFFF00900001"
 F13 = "FFFFFFFFFFFFFFFFFFFFFFFF00900013"
@@ -18,8 +14,9 @@ F13 = "FFFFFFFFFFFFFFFFFFFFFFFF00900013"
 
 def decide(conn, sid, verdict="TRUE_POSITIVE", comment=None, action="accept"):
     f = finding_by_source(conn, sid)
-    return d.record_decision(conn, f["id"], expected_revision=f["revision"], action=action, author="me",
-                             verdict=verdict, comment=comment)
+    return d.record_decision(
+        conn, f["id"], expected_revision=f["revision"], action=action, author="me", verdict=verdict, comment=comment
+    )
 
 
 def run(demo, **kw):
@@ -45,20 +42,23 @@ def test_exact_values_metadata_and_preservation(demo):
     assert wb["ToolB"]["N2"].value == '=IF(J2="","à faire","fait")'
     headers, fortify = rows_by_key(wb["Fortify"], "Instance ID")
     assert len(fortify) == 13
-    r1 = dict(zip(headers, fortify[F1]))
+    r1 = dict(zip(headers, fortify[F1], strict=True))
     assert r1["analysis result"] == "True Positive" and r1["Analysis result comment"] == DISCUSSION_COMMENT
     assert r1["Category"] == "SQL Injection" and r1["Fortify Category"] == "Input Validation and Representation"
     assert r1["Version name"] == "release" and r1["Line number"] == 12 and r1["CWE"] == "CWE-89"
     assert r1["Found in ToolB"] is None  # comparatif : palier P5
-    r2 = dict(zip(headers, fortify["FFFFFFFFFFFFFFFFFFFFFFFF00900002"]))
+    r2 = dict(zip(headers, fortify["FFFFFFFFFFFFFFFFFFFFFFFF00900002"], strict=True))
     assert r2["analysis result"] == "Not an issue" and r2["Analysis result comment"] == DISCUSSION_COMMENT
-    r13 = dict(zip(headers, fortify[F13]))
+    r13 = dict(zip(headers, fortify[F13], strict=True))
     assert r13["Line number"] is None and r13["analysis result"] is None  # pas de 0 inventé, pas de verdict
     th, toolb = rows_by_key(wb["ToolB"], "Finding ID")
-    assert dict(zip(th, toolb["TB-0001"]))["analysis result"] == "True Positive"
-    assert dict(zip(th, toolb["TB-0003"]))["Notes équipe"] == "voir avec l'équipe front"
-    assert dict(zip(th, toolb["TB-0008"]))["analysis result"] == "Not an issue"  # saisie humaine conservée
-    assert all(v in (None, "True Positive", "Not an issue") for v in [dict(zip(headers, r))["analysis result"] for r in fortify.values()])
+    assert dict(zip(th, toolb["TB-0001"], strict=True))["analysis result"] == "True Positive"
+    assert dict(zip(th, toolb["TB-0003"], strict=True))["Notes équipe"] == "voir avec l'équipe front"
+    assert dict(zip(th, toolb["TB-0008"], strict=True))["analysis result"] == "Not an issue"  # saisie humaine conservée
+    assert all(
+        v in (None, "True Positive", "Not an issue")
+        for v in [dict(zip(headers, r, strict=True))["analysis result"] for r in fortify.values()]
+    )
     assert res.summary["without_target"][0]["source_id"] == "TB-0009"
     assert finding_by_source(conn, F1)["export_state"] == ExportState.EXPORTED
     assert finding_by_source(conn, F13)["export_state"] == ExportState.NOT_EXPORTED
@@ -104,8 +104,8 @@ def test_reordered_workbook_matched_by_key(demo):
     res = run(demo, mode="final")
     assert res.status == "verified"
     th, toolb = rows_by_key(load_workbook(path)["ToolB"], "Finding ID")
-    assert dict(zip(th, toolb["TB-0005"]))["analysis result"] == "Not an issue"
-    assert dict(zip(th, toolb["TB-0004"]))["analysis result"] is None
+    assert dict(zip(th, toolb["TB-0005"], strict=True))["analysis result"] == "Not an issue"
+    assert dict(zip(th, toolb["TB-0004"], strict=True))["analysis result"] is None
 
 
 def test_duplicate_key_blocks_only_those_rows(demo):
@@ -140,7 +140,7 @@ def test_replace_permission_error_is_locked(demo, monkeypatch):
     def deny(*a, **k):
         raise PermissionError("[WinError 32] fichier utilisé par un autre processus")
 
-    monkeypatch.setattr(ex.os, "replace", deny)
+    monkeypatch.setattr(ex.Path, "replace", deny)
     decide(demo["conn"], "TB-0001")
     res = run(demo)
     assert res.status == "locked"
@@ -182,8 +182,15 @@ def test_undo_after_export_marks_stale_and_reexport_clears(demo):
 def test_investigation_leaves_cells_empty(demo):
     conn = demo["conn"]
     f = finding_by_source(conn, "TB-0002")
-    d.record_decision(conn, f["id"], expected_revision=f["revision"], action="investigate", author="me",
-                      investigation_question="Paramétrage réel ?", investigation_reason="trace partielle")
+    d.record_decision(
+        conn,
+        f["id"],
+        expected_revision=f["revision"],
+        action="investigate",
+        author="me",
+        investigation_question="Paramétrage réel ?",
+        investigation_reason="trace partielle",
+    )
     res = run(demo)
     _, toolb = rows_by_key(load_workbook(res.destination)["ToolB"], "Finding ID")
     assert toolb["TB-0002"][9] is None

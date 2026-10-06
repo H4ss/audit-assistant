@@ -76,7 +76,11 @@ def test_serve_starts_and_stops(home: Path):
     env = dict(os.environ, PALADIN_HOME=str(home))
     proc = subprocess.Popen(
         [sys.executable, "-m", "paladin", "serve", "--port", str(port)],
-        env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
     )
     try:
         deadline = time.monotonic() + 30
@@ -135,10 +139,20 @@ def test_campaign_create_from_example_shape(home, tmp_path, capsys):
     (tmp_path / "repo").mkdir()
     Workbook().save(tmp_path / "cible.xlsx")
     (tmp_path / "rapport.csv").write_text("Ref,Titre\nX-1,XSS\n", encoding="utf-8")
-    desc = {"id": "essai", "name": "Essai", "target_workbook": "cible.xlsx",
-            "repos": [{"name": "repo", "path": "repo"}],
-            "tools": [{"label": "ToolX", "kind": "csv", "sheet_name": None,
-                       "sources": [{"role": "findings", "kind": "csv", "path": "rapport.csv"}]}]}
+    desc = {
+        "id": "essai",
+        "name": "Essai",
+        "target_workbook": "cible.xlsx",
+        "repos": [{"name": "repo", "path": "repo"}],
+        "tools": [
+            {
+                "label": "ToolX",
+                "kind": "csv",
+                "sheet_name": None,
+                "sources": [{"role": "findings", "kind": "csv", "path": "rapport.csv"}],
+            }
+        ],
+    }
     f = tmp_path / "campagne.json"
     f.write_text(json.dumps(desc), encoding="utf-8")
     assert cli.main(["campaign", "create", str(f)]) == 0

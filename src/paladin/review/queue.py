@@ -40,9 +40,9 @@ def _view_clause(view: str) -> str:
     return {
         "todo": to_review,
         "ready": f"{to_review} AND f.processing_state = '{ProcessingState.PROPOSAL_READY}'"
-                 f" AND {_LATEST_VERDICT} IN ('TRUE_POSITIVE', 'NOT_AN_ISSUE')",
+        f" AND {_LATEST_VERDICT} IN ('TRUE_POSITIVE', 'NOT_AN_ISSUE')",
         "missing": f"{to_review} AND ({_LATEST_VERDICT} IS NULL OR {_LATEST_VERDICT} = 'NEEDS_REVIEW'"
-                   " OR f.divergent_fields_json != '[]')",
+        " OR f.divergent_fields_json != '[]')",
         "investigating": f"f.review_state = '{ReviewState.INVESTIGATING}'",
         "reexam": f"f.review_state = '{ReviewState.REEXAM_REQUIRED}'",
         "validated": f"f.review_state = '{ReviewState.VALIDATED}'",
@@ -50,8 +50,14 @@ def _view_clause(view: str) -> str:
     }.get(view, to_review)
 
 
-def list_findings(conn: sqlite3.Connection, campaign_id: str, view: str = "todo", tool: str | None = None,
-                  search: str | None = None, limit: int = 1000) -> list[dict[str, Any]]:
+def list_findings(
+    conn: sqlite3.Connection,
+    campaign_id: str,
+    view: str = "todo",
+    tool: str | None = None,
+    search: str | None = None,
+    limit: int = 1000,
+) -> list[dict[str, Any]]:
     sql = (
         f"SELECT f.*, t.label AS tool_label, {_LATEST_VERDICT} AS proposed_verdict FROM finding f"
         f" JOIN tool t ON t.id = f.tool_id WHERE f.campaign_id = ? AND {_view_clause(view)}"
@@ -68,21 +74,28 @@ def list_findings(conn: sqlite3.Connection, campaign_id: str, view: str = "todo"
     return [dict(r) for r in conn.execute(sql, params)]
 
 
-def neighbour(conn: sqlite3.Connection, campaign_id: str, finding_id: str, view: str, tool: str | None,
-              direction: int = 1) -> str | None:
+def neighbour(
+    conn: sqlite3.Connection, campaign_id: str, finding_id: str, view: str, tool: str | None, direction: int = 1
+) -> str | None:
     """Finding suivant/précédent dans la vue, relativement à la position globale."""
-    ordered = [r["id"] for r in conn.execute(
-        f"SELECT f.id FROM finding f JOIN tool t ON t.id = f.tool_id WHERE f.campaign_id = ? ORDER BY {_ORDER}",
-        (campaign_id,))]
+    ordered = [
+        r["id"]
+        for r in conn.execute(
+            f"SELECT f.id FROM finding f JOIN tool t ON t.id = f.tool_id WHERE f.campaign_id = ? ORDER BY {_ORDER}",
+            (campaign_id,),
+        )
+    ]
     in_view = {r["id"] for r in list_findings(conn, campaign_id, view, tool, limit=100000)}
     if finding_id not in ordered:
         return next(iter(i for i in ordered if i in in_view), None)
     idx = ordered.index(finding_id)
-    seq = ordered[idx + 1:] if direction > 0 else list(reversed(ordered[:idx]))
+    seq = ordered[idx + 1 :] if direction > 0 else list(reversed(ordered[:idx]))
     return next((i for i in seq if i in in_view), None)
 
 
-def position(conn: sqlite3.Connection, campaign_id: str, finding_id: str, view: str, tool: str | None) -> tuple[int, int]:
+def position(
+    conn: sqlite3.Connection, campaign_id: str, finding_id: str, view: str, tool: str | None
+) -> tuple[int, int]:
     ids = [r["id"] for r in list_findings(conn, campaign_id, view, tool, limit=100000)]
     return (ids.index(finding_id) + 1 if finding_id in ids else 0), len(ids)
 
@@ -92,14 +105,26 @@ def counters(conn: sqlite3.Connection, campaign_id: str) -> dict[str, int]:
     q = lambda sql: conn.execute(sql, (campaign_id,)).fetchone()[0]  # noqa: E731
     return {
         "total": q("SELECT COUNT(*) FROM finding WHERE campaign_id = ?"),
-        "to_review": q(f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND review_state = '{ReviewState.TO_REVIEW}'"),
-        "proposals_waiting": q(f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND review_state IN ('{ReviewState.TO_REVIEW}',"
-                               f" '{ReviewState.REEXAM_REQUIRED}') AND processing_state = '{ProcessingState.PROPOSAL_READY}'"),
-        "investigating": q(f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND review_state = '{ReviewState.INVESTIGATING}'"),
-        "validated": q(f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND review_state = '{ReviewState.VALIDATED}'"),
-        "reexam": q(f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND review_state = '{ReviewState.REEXAM_REQUIRED}'"),
-        "not_exported": q(f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND current_decision_id IS NOT NULL"
-                          f" AND export_state != '{ExportState.EXPORTED}'"),
+        "to_review": q(
+            f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND review_state = '{ReviewState.TO_REVIEW}'"
+        ),
+        "proposals_waiting": q(
+            f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND review_state IN ('{ReviewState.TO_REVIEW}',"
+            f" '{ReviewState.REEXAM_REQUIRED}') AND processing_state = '{ProcessingState.PROPOSAL_READY}'"
+        ),
+        "investigating": q(
+            f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND review_state = '{ReviewState.INVESTIGATING}'"
+        ),
+        "validated": q(
+            f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND review_state = '{ReviewState.VALIDATED}'"
+        ),
+        "reexam": q(
+            f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND review_state = '{ReviewState.REEXAM_REQUIRED}'"
+        ),
+        "not_exported": q(
+            f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND current_decision_id IS NOT NULL"
+            f" AND export_state != '{ExportState.EXPORTED}'"
+        ),
         "stale": q(f"SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND export_state = '{ExportState.STALE}'"),
         "discussion": q("SELECT COUNT(*) FROM finding WHERE campaign_id = ? AND discussion_required = 1"),
     }
@@ -135,7 +160,8 @@ class Card:
 
 def card(conn: sqlite3.Connection, campaign_id: str, finding_id: str, view: str, tool: str | None) -> Card:
     row = conn.execute(
-        "SELECT f.*, t.label AS tool_label FROM finding f JOIN tool t ON t.id = f.tool_id WHERE f.id = ? AND f.campaign_id = ?",
+        "SELECT f.*, t.label AS tool_label FROM finding f JOIN tool t ON t.id = f.tool_id WHERE f.id = ? AND"
+        " f.campaign_id = ?",
         (finding_id, campaign_id),
     ).fetchone()
     if row is None:
@@ -145,7 +171,8 @@ def card(conn: sqlite3.Connection, campaign_id: str, finding_id: str, view: str,
     divergences = []
     for fld in sorted(divergent):
         values = conn.execute(
-            "SELECT v.value_json, r.role, r.locator FROM field_value v JOIN source_record r ON r.id = v.source_record_id"
+            "SELECT v.value_json, r.role, r.locator FROM field_value v JOIN source_record r ON r.id ="
+            " v.source_record_id"
             " WHERE v.finding_id = ? AND v.field = ? ORDER BY v.created_at DESC",
             (finding_id, fld),
         ).fetchall()
@@ -156,10 +183,16 @@ def card(conn: sqlite3.Connection, campaign_id: str, finding_id: str, view: str,
                 seen.add(key)
                 vals.append({"role": v["role"], "value": loads(v["value_json"]), "locator": v["locator"]})
         divergences.append({"field": fld, "options": vals})
-    provenance = [dict(r) for r in conn.execute(
-        "SELECT r.role, r.locator, r.match_state, r.match_detail, r.created_at, s.original_path FROM source_record r"
-        " LEFT JOIN source_file s ON s.id = r.source_file_id WHERE r.finding_id = ? ORDER BY r.created_at DESC LIMIT 6",
-        (finding_id,))]
+    provenance = [
+        dict(r)
+        for r in conn.execute(
+            "SELECT r.role, r.locator, r.match_state, r.match_detail, r.created_at, s.original_path FROM"
+            " source_record r"
+            " LEFT JOIN source_file s ON s.id = r.source_file_id WHERE r.finding_id = ? ORDER BY r.created_at DESC"
+            " LIMIT 6",
+            (finding_id,),
+        )
+    ]
     route = row["analysis_route"] or "generic"
     return Card(
         finding=dict(row),

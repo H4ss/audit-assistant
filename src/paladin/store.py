@@ -56,7 +56,9 @@ def get_campaign(conn: sqlite3.Connection, campaign_id: str) -> dict[str, Any]:
 
 
 def list_campaigns(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    return [dict(r) for r in conn.execute("SELECT id, name, is_demo, updated_at FROM campaign ORDER BY updated_at DESC")]
+    return [
+        dict(r) for r in conn.execute("SELECT id, name, is_demo, updated_at FROM campaign ORDER BY updated_at DESC")
+    ]
 
 
 def add_tool(conn: sqlite3.Connection, campaign_id: str, label: str, kind: str, sheet_name: str | None) -> str:
@@ -76,7 +78,9 @@ def get_tool(conn: sqlite3.Connection, campaign_id: str, label: str) -> dict[str
 
 
 def list_tools(conn: sqlite3.Connection, campaign_id: str) -> list[dict[str, Any]]:
-    return [dict(r) for r in conn.execute("SELECT * FROM tool WHERE campaign_id = ? ORDER BY created_at", (campaign_id,))]
+    return [
+        dict(r) for r in conn.execute("SELECT * FROM tool WHERE campaign_id = ? ORDER BY created_at", (campaign_id,))
+    ]
 
 
 def add_repo(
@@ -109,11 +113,14 @@ def list_repos(conn: sqlite3.Connection, campaign_id: str) -> list[dict[str, Any
 def set_ui_state(conn: sqlite3.Connection, campaign_id: str, key: str, value: Any) -> None:
     conn.execute(
         "INSERT INTO ui_state (campaign_id, key, value_json, updated_at) VALUES (?, ?, ?, ?)"
-        " ON CONFLICT (campaign_id, key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at",
+        " ON CONFLICT (campaign_id, key) DO UPDATE SET value_json = excluded.value_json, updated_at ="
+        " excluded.updated_at",
         (campaign_id, key, dumps(value), utcnow()),
     )
 
 
 def get_ui_state(conn: sqlite3.Connection, campaign_id: str, key: str, default: Any = None) -> Any:
-    row = conn.execute("SELECT value_json FROM ui_state WHERE campaign_id = ? AND key = ?", (campaign_id, key)).fetchone()
+    row = conn.execute(
+        "SELECT value_json FROM ui_state WHERE campaign_id = ? AND key = ?", (campaign_id, key)
+    ).fetchone()
     return default if row is None else loads(row["value_json"])
