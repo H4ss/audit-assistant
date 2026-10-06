@@ -30,9 +30,13 @@
 | `doctor.py` | Diagnostic OK / WARN / BLOCK avec action corrective | P0 → P4 |
 | `cli.py` | `init`, `demo`, `serve`, `doctor`, `status` | P0 |
 | `web/` | FastAPI + Jinja2, assets locaux, boucle locale uniquement | P0 → P2 |
-| `importers/` | Fortify (fixtures puis API vérifiée), MD par profil, Excel par mapping | P1 |
-| `excel/` | Mapping par onglet, rapprochement, export atomique + manifeste | P1 |
-| `review/` | Décisions append-only, annulation, brouillons, révisions | P2 |
+| `importers/` | Fortify (fixtures puis API vérifiée), MD par profil, Excel/CSV/SARIF, inférence de mapping et profils, pipeline | P1 |
+| `classify.py` | Famille interne, route d'analyse, checklist | P1 |
+| `excel/export.py` | Rapprochement par clé, export vérifié et atomique, manifeste | P1 |
+| `review/decisions.py` | Décisions append-only, annulation, brouillons, révisions | P1 |
+| `review/queue.py` | Vues, ordre stable, compteurs, données de la carte | P2 |
+| `analysis.py` | Enregistrement des propositions, vérification des références, extraits de code | P2 |
+| `campaigns.py` | Création d'une campagne réelle depuis un JSON validé | P2 |
 | `agent/` | Jobs avec bail, API agent, outils OpenCode, skill | P3 |
 | `matching/` | Rapprochement inter-outils, projections `Found in` | P5 |
 | `rules/` | Mémoire, règles, groupes et lots | P6 |

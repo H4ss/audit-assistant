@@ -7,23 +7,25 @@ Un palier se termine par un check avec l'utilisateur, puis un merge sur `main`, 
 
 Contrats, schéma SQLite et migrations, espace hors dépôt, fixtures, CLI, CI Windows/Linux (verte).
 
-## P1 — Imports multi-entrées et Excel — `done` (en attente de check)
+## P1 — Imports multi-entrées et Excel — `done` (v0.1.0)
+
+Fortify (fixtures), MD, Excel/CSV, SARIF, inférence de mapping et profils, classification, rapprochement Excel+MD, identité, noyau des décisions, export vérifié.
+
+## P2 — Revue et facilité d'usage — `done` (en attente de check)
 
 | ID | Tâche | État | Recette |
 |---|---|---|---|
-| P1-1 | Fortify sur fixtures : `release` stricte (absente/ambiguë = blocage), pagination, doublons, totaux, manifeste + réponses brutes, reprise, jeton expiré | done | `test_importers.py` (Fortify) |
-| P1-2 | MD par profil (`heading-kv-v1`, `table-v1`), offsets, sections non reconnues → partiel | done | `test_importers.py` (Markdown) |
-| P1-3 | Lecteurs génériques Excel (fichier ou onglet, détection de l'en-tête) et CSV ; SARIF 2.1.0 | done | idem |
-| P1-4 | **Multi-entrées** : inférence de mapping (noms FR/EN + valeurs), profils proposés → validés → réutilisés ; colonnes cibles jamais prises pour des sources | done | `test_french_csv_mapping_inference`, CLI `inspect` |
-| P1-5 | Classification interne (famille, base, route d'analyse, checklist) | done | `test_classification_basis_is_traceable` |
-| P1-6 | Rapprochement Excel+MD : 3 compteurs, divergences conservées avec provenance par champ | done | `test_excel_md_counters_and_divergence` |
-| P1-7 | Identité : id contextualisé, empreinte documentée, collisions exposées, réimport idempotent, réexamen si la source change | done | idem |
-| P1-8 | Noyau des décisions (avancé depuis P2) : journal append-only, révisions, annulation, brouillons | done | `test_decisions.py` |
-| P1-9 | Export : colonnes autorisées, texte non-formule, valeurs humaines protégées, clé à chaque export, qualification du classeur, verrou, vérification par réouverture, sauvegarde, remplacement atomique, manifeste, périmé | done | `test_export.py` |
-| P1-10 | CLI `import`, `inspect`, `profile`, `export` ; démo importée | done | `test_cli.py` |
-
-## P2 — Revue — `todo`
-(Le noyau des décisions est déjà livré en P1.) Carte de revue, Accepter/Corriger/À investiguer/Passer/Annuler, raccourcis, brouillons, révisions, file stable, reprise, décision enregistrée vs Excel à jour, propositions simulées de démo.
+| P2-1 | Carte de revue : proposition, preuve principale, blocage d'abord ; détails, code, trace, provenance dépliables | done | `test_web.py` |
+| P2-2 | Valider / Valider et rester / Passer / À investiguer / Annuler la dernière décision ; accept vs correct déterminé côté serveur | done | `test_web.py` |
+| P2-3 | Deux champs analyste distincts, « Appétence à discuter » (phrase exacte, n'écrase pas un texte libre), motif interne | done | E2E navigateur |
+| P2-4 | Raccourcis visibles, inactifs en saisie, flèches ignorées sur les contrôles, Entrée seule sans effet | done | E2E navigateur |
+| P2-5 | Brouillons auto-enregistrés, refusés s'ils arrivent après une décision (révision) | done | `test_draft_api…`, E2E |
+| P2-6 | File stable (vues : à revoir, prêtes, contexte manquant, à investiguer, réexamen, validés), suivant relatif à la position | done | `test_queue_does_not_reorder…` |
+| P2-7 | Tableau de bord : reprise, compteurs factuels, « décision enregistrée » vs « Excel à jour / périmé » | done | `test_web.py` |
+| P2-8 | Import, validation de profil (multi-entrées) et export depuis l'interface | done | `test_profile_validation_import_and_export_from_ui` |
+| P2-9 | Sécurité locale : Host restreint, jeton d'interface + origine locale sur toute écriture, jeton agent refusé | done | `test_web.py` |
+| P2-10 | Propositions simulées de démo (marquées), vérification des références de code | done | `test_card_shows…` |
+| P2-11 | Facilité : `Paladin.cmd` / `paladin.sh`, `python -m paladin` = start + navigateur, `campaign create`, README court + GUIDE | done | CI (script), `test_cli.py` |
 
 ## P3 — Agent OpenCode réel — `todo`
 Jobs avec bail, API agent (jeton agent, sans validation), outils OpenCode, agent + skill, validation JSON/références, traçage modèle. **Estimation du coût OpenRouter/GLM présentée avant tout appel réel.**

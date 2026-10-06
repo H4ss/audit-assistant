@@ -44,6 +44,17 @@ jobs:
       - name: Tests (fixtures uniquement, aucun jeton métier)
         run: $PY -m pytest -m "not real"
 
+      - uses: actions/setup-node@v4
+        if: runner.os == 'Linux' && matrix.python == '3.14'
+        with:
+          node-version: "22"
+
+      - name: Test navigateur réel (clavier, brouillons, annulation)
+        if: runner.os == 'Linux' && matrix.python == '3.14'
+        env:
+          PALADIN_E2E: "1"
+        run: $PY -m pytest tests/test_e2e.py -s
+
       - name: Démo et diagnostic
         env:
           PALADIN_HOME: ${{ runner.temp }}/paladin home
@@ -51,3 +62,7 @@ jobs:
           $PY -m paladin demo
           $PY -m paladin status --home "$PALADIN_HOME-demo"
           $PY -m paladin doctor --home "$PALADIN_HOME-demo"
+
+      - name: Script de lancement (double-clic Windows / commande Linux)
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then cmd //c "Paladin.cmd --version"; else ./paladin.sh --version; fi
