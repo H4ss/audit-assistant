@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Paladin local data: never commit campaigns, databases, captures, exports or secrets
+paladin-data/
+workspace/
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.xlsx
+*.xlsm
+~$*
+.env
+.env.*
+secrets*
+*.secret
+*.token
+paladin.local.toml
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
