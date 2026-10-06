@@ -15,7 +15,7 @@ from paladin import cli
 
 pytestmark = pytest.mark.skipif(os.environ.get("PALADIN_E2E") != "1", reason="E2E opt-in : PALADIN_E2E=1")
 
-CHROME = next((c for c in ("chromium", "google-chrome", "google-chrome-stable", "chrome") if shutil.which(c)), None)
+CHROME = next((c for c in ("google-chrome-stable", "google-chrome", "chromium", "chromium-browser", "chrome") if shutil.which(c)), None)
 
 
 def _port() -> int:
@@ -52,6 +52,9 @@ def test_keyboard_flow_in_real_browser(home: Path, tmp_path: Path):
         run = subprocess.run(["node", str(script), f"http://127.0.0.1:{app_port}", str(cdp_port)],
                              capture_output=True, text=True, timeout=120)
         print(run.stdout)
+        if run.returncode != 0 and os.environ.get("GITHUB_ACTIONS"):
+            for line in (run.stdout + run.stderr).splitlines()[-25:]:  # annotations lisibles sans authentification
+                print(f"::error title=E2E::{line}")
         assert run.returncode == 0, run.stdout + run.stderr
     finally:
         browser.terminate()
