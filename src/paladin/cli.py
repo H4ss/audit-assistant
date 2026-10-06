@@ -79,8 +79,12 @@ def cmd_demo(args: argparse.Namespace) -> int:
             from paladin import store
             from paladin.importers.pipeline import import_tool
 
+            from paladin.demo import add_simulated_proposals
+
             for tool in store.list_tools(conn, result.campaign_id):
                 print_import_report(import_tool(settings, conn, result.campaign_id, tool["label"]))
+            n = add_simulated_proposals(conn, result.campaign_id)
+            print(f"{n} proposition(s) SIMULÉE(S) ajoutée(s) pour la démo (aucun modèle appelé).")
     finally:
         conn.close()
     print(f"Espace de démo : {home}")
@@ -134,7 +138,54 @@ def cmd_serve(args: argparse.Namespace) -> int:
         if check.area in {"agent", "fortify"}:
             print(f"Connecteur {check.area} : [{check.status.value}] {check.detail}")
     app = create_app(settings)
+    url = f"http://{host}:{port}/"
+    if getattr(args, "browser", False):
+        import threading
+        import webbrowser
+
+        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+    print("Arrêter : Ctrl+C dans cette fenêtre.")
     uvicorn.run(app, host=host, port=port, log_level="warning")
+    return 0
+
+
+def cmd_start(args: argparse.Namespace) -> int:
+    """Le plus simple : ouvre l'espace réel s'il existe, sinon la démo (créée au besoin)."""
+    real = default_home().resolve()
+    demo_home = default_demo_home().resolve()
+    if args.home:
+        target = Path(args.home).expanduser().resolve()
+    elif (real / "paladin.toml").exists():
+        target = real
+    else:
+        if not (demo_home / "paladin.toml").exists():
+            print("Première utilisation : création d'une démonstration avec des données fictives.\n")
+            cmd_demo(argparse.Namespace(home=None, reset=False))
+            print()
+        target = demo_home
+        print("Espace de DÉMO (données fictives). Pour une vraie campagne : voir docs/GUIDE.md.")
+    return cmd_serve(argparse.Namespace(home=str(target), host=None, port=args.port, demo=False,
+                                        browser=not args.no_browser))
+
+
+def cmd_campaign(args: argparse.Namespace) -> int:
+    from paladin.campaigns import CampaignError, create_from_file
+
+    home = _home_arg(args)
+    _guard_home(home)
+    if not (home / "paladin.toml").exists():
+        init_home(home)
+    settings = load_settings(home)
+    conn = open_database(settings.db_path)
+    try:
+        cid = create_from_file(settings, conn, Path(args.file))
+    except CampaignError as exc:
+        print(f"Campagne non créée : {exc}")
+        return 2
+    finally:
+        conn.close()
+    print(f"Campagne « {cid} » créée dans {home}.")
+    print("Suite : python -m paladin start   (puis « Importer » dans l'interface)")
     return 0
 
 
@@ -332,7 +383,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--host", default=None)
     p.add_argument("--port", type=int, default=None)
     p.add_argument("--demo", action="store_true", help="Ouvrir l'espace de démonstration.")
+    p.add_argument("--browser", action="store_true", help="Ouvrir le navigateur.")
     p.set_defaults(func=cmd_serve)
+    p = add("start", "Démarrer simplement (défaut sans argument) : interface + navigateur.")
+    p.add_argument("--port", type=int, default=None)
+    p.add_argument("--no-browser", action="store_true")
+    p.set_defaults(func=cmd_start)
+    p = add("campaign", "Créer une campagne réelle depuis un fichier (voir examples/campaign.example.json).")
+    p.add_argument("action", choices=["create"])
+    p.add_argument("file")
+    p.set_defaults(func=cmd_campaign)
     p = add("doctor", "Diagnostic de l'installation et des connecteurs.")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_doctor)
@@ -363,5 +423,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     _configure_stdio()
-    args = build_parser().parse_args(argv)
+    argv = sys.argv[1:] if argv is None else argv
+    args = build_parser().parse_args(argv or ["start"])
     return int(args.func(args) or 0)

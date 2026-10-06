@@ -1,96 +1,44 @@
-# Project Paladin
+# Paladin
 
-Assistant **local** de triage et de comparaison AppSec : transformer un volume ingérable de findings (Fortify, rapports Markdown, classeurs concurrents) en un volume gérable de **décisions vérifiables**, puis compléter fidèlement l'Excel d'audit.
+Assistant **local** de revue de findings AppSec (Fortify, rapports Markdown, Excel, CSV ou SARIF de concurrents). Il produit **l'Excel d'audit** à partir de décisions que **vous** validez.
 
-Le modèle **propose**, l'analyste **valide**. L'Excel ne reçoit que des décisions validées, au texte exact.
+Le modèle propose, vous décidez. Rien ne part dans l'Excel sans votre validation.
 
-> Spécification de référence : [`SPECS_ASSISTANT_TRIAGE_APPSEC.md`](SPECS_ASSISTANT_TRIAGE_APPSEC.md) · Architecture : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · Avancement : [`docs/BACKLOG.md`](docs/BACKLOG.md) · Limites : [`docs/LIMITS.md`](docs/LIMITS.md)
+## Démarrer
 
-## État actuel
-
-Paliers livrés : **P0 — socle et contrats**, **P1 — imports multi-entrées et export Excel**. La revue dans l'interface (P2) et l'agent OpenCode/GLM (P3) arrivent ensuite (voir le backlog). À ce stade, les décisions existent dans le moteur et les tests, mais pas encore dans l'interface.
-
-Combinaisons vérifiées : Python 3.14 sur Linux (poste de développement) ; Windows/Linux 3.14 et Linux 3.12 via la CI. **Aucune connexion Fortify réelle ni GLM réelle n'a été vérifiée à ce stade.**
-
-## Prérequis
-
-- Git
-- Python **3.14** (référence) — 3.12 et 3.13 pris en charge
-- Aucun Docker, Node, compte payant ou clé LLM pour la démo
-
-## Installation
-
-### Linux
+Il faut **Git** et **Python 3.14** (3.12 ou plus fonctionne aussi).
 
 ```bash
-git clone https://github.com/H4ss/audit-assitant.git project-paladin
-cd project-paladin
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.lock
-python -m pip install --no-deps -e .
-python -m paladin demo
-python -m paladin serve
+git clone https://github.com/H4ss/audit-assitant.git paladin
 ```
 
-### Windows (PowerShell)
+Ensuite :
 
-```powershell
-git clone https://github.com/H4ss/audit-assitant.git project-paladin
-cd project-paladin
-py -3.14 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.lock
-python -m pip install --no-deps -e .
-python -m paladin demo
-python -m paladin serve
-```
+- **Windows** : double-cliquer sur **`Paladin.cmd`** dans le dossier `paladin`.
+- **Linux** : `./paladin.sh`
 
-Si l'activation PowerShell est bloquée par la stratégie d'exécution, appeler directement le Python du venv, sans activer :
+Au premier lancement, le script installe tout (1 à 2 minutes), crée une **démo avec des données fictives** et ouvre le navigateur. Pour arrêter : `Ctrl+C` dans la fenêtre.
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.lock
-.\.venv\Scripts\python.exe -m pip install --no-deps -e .
-.\.venv\Scripts\python.exe -m paladin demo
-.\.venv\Scripts\python.exe -m paladin serve
-```
+## Utiliser
 
-`serve` affiche l'URL locale (boucle locale uniquement, port suivant libre si `8765` est occupé), le dossier de données et l'état des connecteurs.
+1. **Sources** : cliquer sur « Importer ». Si une source est nouvelle, Paladin propose comment la lire. Vous validez une fois, et c'est retenu pour la suite.
+2. **Revue** : cliquer sur « Commencer la revue ». Pour chaque finding : `T` ou `N` pour le verdict, `A` pour valider et passer au suivant. `D` donne « security appetite to be discussed », `I` met « À investiguer », `U` annule. Appuyer sur `?` affiche tous les raccourcis.
+3. **Excel** : cliquer sur « Exporter ». Vos décisions sont enregistrées tout de suite ; l'Excel est mis à jour à l'export. Si Excel est ouvert, rien n'est perdu : fermez-le et relancez l'export.
 
-## Où sont les données ?
+## Votre propre campagne
 
-Jamais dans le dépôt. Par défaut :
-
-| OS | Espace de travail | Espace de démo |
-|---|---|---|
-| Windows | `%LOCALAPPDATA%\Paladin` | `%LOCALAPPDATA%\Paladin-demo` |
-| Linux | `~/.local/share/paladin` | `~/.local/share/paladin-demo` |
-
-Changer avec `--home <dossier>` ou la variable `PALADIN_HOME`. Paladin refuse un dossier de données situé dans le dépôt. Une mise à jour du logiciel ne touche pas aux campagnes.
-
-## Commandes
-
-| Commande | Rôle |
-|---|---|
-| `python -m paladin init` | Créer l'espace de travail réel (config, base, jetons locaux) |
-| `python -m paladin demo [--reset]` | Créer l'espace de démonstration (données fictives) |
-| `python -m paladin serve [--demo] [--port N]` | Lancer l'interface locale |
-| `python -m paladin doctor [--json]` | Diagnostic : Python, dossiers, base, OpenCode, Fortify |
-| `python -m paladin status` | Lister les campagnes |
-| `python -m paladin import [--tool X] [--resume]` | Importer les sources déclarées de la campagne |
-| `python -m paladin inspect <fichier>` | Détecter les champs d'un rapport (xlsx, csv, md, sarif) et proposer un mapping |
-| `python -m paladin profile list\|show\|validate <id>` | Valider une fois le mapping proposé d'une nouvelle source |
-| `python -m paladin export [--final]` | Écrire les décisions validées (copie de travail par défaut) |
-
-## Multi-entrées
-
-Une source se déclare par son rôle (`findings`, `inventory`, `details`) et son type : Excel (fichier séparé ou onglet du classeur cible), CSV, Markdown (profils `heading-kv-v1`, `table-v1`), SARIF 2.1.0 ou Fortify. Pour une source inconnue, Paladin **propose** un mapping à partir des en-têtes et des valeurs (synonymes FR/EN, `chemin:ligne`, CWE, sévérités). La proposition est validée une fois, puis réutilisée pour toute source de même structure. Paladin infère aussi une **famille interne** (CWE d'abord, puis mots-clés, base toujours tracée) et une **route d'analyse** (flux de données, crypto, secret, configuration, dépendance) qui fixe les vérifications à mener. La catégorie brute de l'outil reste la seule exportée.
-
-## Tests
+Copier [`examples/campaign.example.json`](examples/campaign.example.json), y mettre vos chemins, puis :
 
 ```bash
-python -m pip install -r requirements-dev.lock
-python -m pytest -m "not real"
+Paladin.cmd campaign create ma-campagne.json        # Windows
+./paladin.sh campaign create ma-campagne.json       # Linux
 ```
 
-Les tests marqués `real` (OpenCode/GLM, Fortify) sont opt-in et exclus de la CI.
+Relancer ensuite `Paladin.cmd` : il ouvre votre campagne au lieu de la démo. Vos données restent **hors du dépôt**, dans `%LOCALAPPDATA%\Paladin` sous Windows et `~/.local/share/paladin` sous Linux.
+
+## En savoir plus
+
+- [Guide complet](docs/GUIDE.md) : commandes, formats d'entrée, export, dépannage.
+- [Limites connues](docs/LIMITS.md) · [Avancement](docs/BACKLOG.md) · [Architecture](docs/ARCHITECTURE.md) · [Spécification](SPECS_ASSISTANT_TRIAGE_APPSEC.md)
+
+**État** : la revue, les imports et l'export sont utilisables sur la démo. La connexion OpenCode/GLM (propositions réelles) et Fortify réel ne sont **pas encore vérifiées** ; la démo affiche des propositions **simulées**, signalées comme telles.

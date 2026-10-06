@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} — Paladin{% endblock %}
+{% block content %}
+<section class="hero panel">
+  <div>
+    <h1>{{ campaign.name }}</h1>
+    <p class="muted">{{ counters.total }} findings · {{ counters.validated }} validés · {{ counters.investigating }} à investiguer · {{ counters.to_review + counters.reexam }} à revoir dont {{ counters.proposals_waiting }} avec proposition</p>
+  </div>
+  <div class="actions">
+    {% if last_finding %}
+      <a class="btn primary" href="/c/{{ campaign.id }}/f/{{ last_finding.id }}?view={{ last_finding.view }}&tool={{ last_finding.tool }}">Reprendre ({{ last_finding.source_id }})</a>
+      <a class="btn" href="/c/{{ campaign.id }}/next?view=ready">Propositions prêtes</a>
+    {% else %}
+      <a class="btn primary" href="/c/{{ campaign.id }}/next?view=ready">Commencer la revue</a>
+    {% endif %}
+    <a class="btn" href="/c/{{ campaign.id }}/queue">Voir la file</a>
+  </div>
+</section>
+
+<div class="two-cols">
+  <section class="panel">
+    <h2>1. Sources</h2>
+    <table class="table">
+      <thead><tr><th>Outil</th><th>Findings</th><th>Dernier import</th><th>Onglet Excel</th></tr></thead>
+      <tbody>
+      {% for t in tools %}
+        <tr>
+          <td><strong>{{ t.label }}</strong></td>
+          <td>{{ t.count }}</td>
+          <td>
+            {% if t.run %}
+              <span class="badge {{ 'ok' if t.run.completeness == 'complete' else 'warn' }}">{{ 'complet' if t.run.completeness == 'complete' else ('partiel' if t.run.completeness == 'partial' else 'inconnu') }}</span>
+              {% if t.report.unrecognized %}<details><summary>{{ t.report.unrecognized|length }} partie(s) non reconnue(s)</summary><ul>{% for u in t.report.unrecognized %}<li><code>{{ u.locator }}</code> — {{ u.reason }}</li>{% endfor %}</ul></details>{% endif %}
+            {% else %}<span class="muted">jamais importé</span>{% endif %}
+          </td>
+          <td>{{ t.sheet_name or "— (pas encore d'onglet)" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if pending_profiles %}
+    <div class="callout warn">
+      <strong>Nouvelle source à valider</strong> — Paladin a proposé un mapping ; vérifier une fois, il sera réutilisé ensuite.
+      <ul>{% for p in pending_profiles %}<li><a href="/c/{{ campaign.id }}/profiles/{{ p.id }}">{{ p.name }} ({{ p.source_kind }})</a></li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    <form method="post" action="/c/{{ campaign.id }}/import">
+      <input type="hidden" name="token" value="{{ token }}">
+      <button class="btn">Importer / réimporter les sources</button>
+      <span class="muted small">Réimporter ne crée pas de doublon.</span>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>2. Excel</h2>
+    <p>
+      {% if counters.stale %}<span class="badge bad">{{ counters.stale }} décision(s) annulée(s) ou modifiée(s) après export : Excel périmé</span>
+      {% elif counters.not_exported %}<span class="badge warn">{{ counters.not_exported }} décision(s) enregistrée(s), pas encore dans l'Excel</span>
+      {% elif counters.validated or counters.investigating %}<span class="badge ok">Excel à jour</span>
+      {% else %}<span class="badge">Aucune décision à exporter pour l'instant</span>{% endif %}
+    </p>
+    <p class="muted small">Les décisions sont enregistrées immédiatement dans Paladin ; l'Excel est mis à jour à l'export. Un Excel ouvert ne fait rien perdre.</p>
+    <form method="post" action="/c/{{ campaign.id }}/export" class="row">
+      <input type="hidden" name="token" value="{{ token }}">
+      <button class="btn primary" name="mode" value="working_copy">Exporter (copie de travail)</button>
+      <button class="btn" name="mode" value="final" data-confirm="Mettre à jour le classeur cible désigné ? Une sauvegarde est faite avant écriture.">Mettre à jour le classeur cible</button>
+    </form>
+    {% if last_export %}
+    <p class="small muted">Dernier export : {{ last_export.created_at[:16].replace('T', ' ') }} — {{ last_export.status }}{% if last_export.status == 'verified' %} → <code>{{ last_export.destination_path }}</code>{% endif %}</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="panel">
+  <h2>Dernière décision</h2>
+  {% if last_decided %}
+  <form method="post" action="/c/{{ campaign.id }}/undo" class="row">
+    <input type="hidden" name="token" value="{{ token }}">
+    <span>{{ last_decided.source_id }} — {{ VERDICT_LABELS.get(last_decided.verdict, 'À investiguer') }}{% if last_decided.comment %} · « {{ last_decided.comment }} »{% endif %}</span>
+    <button class="btn">Annuler cette décision</button>
+  </form>
+  {% else %}<p class="muted">Aucune décision pour l'instant.</p>{% endif %}
+  <p class="small muted">Données : <code>{{ home }}</code></p>
+</section>
+{% endblock %}

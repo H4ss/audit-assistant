@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% set f = c.finding %}
+{% set a = c.analysis %}
+{% block title %}{{ f.source_id }} — Paladin{% endblock %}
+{% block content %}
+<div class="card-nav row">
+  <a class="btn small" href="/c/{{ campaign.id }}/queue?view={{ view }}&tool={{ tool }}">← File « {{ VIEWS.get(view, view) }} »</a>
+  {% if prev_id %}<a class="btn small" id="nav-prev" href="/c/{{ campaign.id }}/f/{{ prev_id }}?view={{ view }}&tool={{ tool }}">Précédent <kbd>←</kbd></a>{% endif %}
+  <span class="muted">{% if c.position[0] %}{{ c.position[0] }} / {{ c.position[1] }}{% else %}hors de cette vue{% endif %}</span>
+  {% if next_id %}<a class="btn small" id="nav-next" href="/c/{{ campaign.id }}/f/{{ next_id }}?view={{ view }}&tool={{ tool }}">Suivant</a>{% endif %}
+  <span class="spacer"></span>
+  <span class="badge {{ 'ok' if f.current_decision_id else '' }}">{{ 'Décision enregistrée' if f.current_decision_id else 'Pas de décision' }}</span>
+  {% if f.current_decision_id %}<span class="badge {{ 'ok' if f.export_state == 'exported' else ('bad' if f.export_state == 'stale' else 'warn') }}">{{ EXPORT_LABELS[f.export_state] }}</span>{% endif %}
+</div>
+
+<section class="panel finding-head">
+  <div class="row wrap">
+    <span class="badge tool">{{ c.tool }}</span>
+    <code class="sid">{{ f.source_id }}</code>
+    <h1>{{ f.category or 'Catégorie absente' }}</h1>
+    <span class="badge">{{ f.criticality_raw or 'criticité absente' }}</span>
+    <span class="badge route" title="Base : {{ f.family_basis or 'aucune' }}">{{ c.family_label }} · {{ f.analysis_route }}</span>
+    {% if f.review_state == 'reexam_required' %}<span class="badge bad">Réexamen requis : la source a changé</span>{% endif %}
+  </div>
+  <p class="loc"><code>{{ f.normalized_path or f.full_filename or 'emplacement absent' }}{% if f.line_number %}:{{ f.line_number }}{% else %} (ligne absente){% endif %}</code>
+    {% if editor %}<form method="post" action="/c/{{ campaign.id }}/f/{{ f.id }}/open-editor" class="inline"><input type="hidden" name="token" value="{{ token }}"><button class="link">ouvrir dans l'éditeur</button></form>{% endif %}
+  </p>
+  {% if c.divergences %}
+  <div class="callout warn"><strong>Sources en désaccord</strong> (aucune valeur choisie automatiquement) :
+    <ul>{% for d in c.divergences %}<li>{{ d.field }} : {% for v in d.options %}<b>{{ v.value }}</b> <span class="muted">({{ 'Excel' if v.role == 'inventory' else ('MD' if v.role == 'details' else v.role) }})</span>{% if not loop.last %} ≠ {% endif %}{% endfor %}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if c.details.preexisting_analyst_values %}
+  <div class="callout">Valeur déjà saisie dans l'Excel avant Paladin :
+    {% for k, v in c.details.preexisting_analyst_values.items() %}<b>{{ k }}</b> = « {{ v }} » {% endfor %}— elle n'est pas écrasée sans autorisation explicite.</div>
+  {% endif %}
+</section>
+
+<div class="review-grid">
+  <section class="panel proposal">
+    <h2>Proposition</h2>
+    {% if a %}
+      <div class="row wrap">
+        <span class="badge big v-{{ a.proposed_verdict|lower }}">{{ VERDICT_LABELS[a.proposed_verdict] }}</span>
+        {% if a.is_simulated %}<span class="badge demo" title="Écrite à la main pour la démo, aucun modèle appelé">proposition simulée</span>
+        {% else %}<span class="muted small">{{ a.model_requested }} → {{ a.model_resolved }}</span>{% endif %}
+        <span class="muted small" title="Déclarée par le modèle, jamais calibrée">confiance déclarée : {{ a.payload.model_confidence.level }} (non calibrée)</span>
+      </div>
+      <p class="summary">{{ a.summary }}</p>
+      {% if a.payload.missing_information %}<div class="callout warn"><strong>Manque :</strong> {{ a.payload.missing_information|join(' · ') }}</div>{% endif %}
+      {% if a.payload.next_action and a.proposed_verdict == 'NEEDS_REVIEW' %}<p><strong>Prochaine action :</strong> {{ a.payload.next_action }}</p>{% endif %}
+      <h3>Preuves</h3>
+      {% for e in a.evidence %}
+        <div class="evidence">
+          <code>{{ e.file_path }}:{{ e.line_start }}{% if e.line_end and e.line_end != e.line_start %}-{{ e.line_end }}{% endif %}</code>
+          {% if e.reference_check == 'verified' %}<span class="badge ok" title="La ligne citée existe et correspond — cela ne valide pas le raisonnement">référence vérifiée</span>
+          {% elif e.reference_check == 'mismatch' %}<span class="badge bad">référence invalide</span>
+          {% elif e.reference_check == 'missing_file' %}<span class="badge bad">fichier introuvable</span>
+          {% else %}<span class="badge warn">{{ e.reference_check }}</span>{% endif %}
+          {% if e.note %}<span class="muted small">{{ e.note }}</span>{% endif %}
+          {% if e.excerpt %}<pre class="code">{{ e.excerpt }}</pre>{% endif %}
+        </div>
+      {% else %}<p class="muted">Aucune preuve citée.</p>{% endfor %}
+      <p class="muted small">« Référence vérifiée » signifie que la ligne existe ; le raisonnement reste à juger par vous.</p>
+      {% if a.payload.assumptions %}<p class="small"><strong>Hypothèses :</strong> {{ a.payload.assumptions|join(' · ') }}</p>{% endif %}
+      {% if a.payload.checks %}<p class="small"><strong>Contrôles :</strong> {% for ch in a.payload.checks %}{{ ch.name }} = {{ ch.status }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+    {% else %}
+      <p><strong>Aucune proposition.</strong> Décision manuelle possible.</p>
+      <p class="muted">Vérifications utiles ({{ f.analysis_route }}) :</p>
+      <ul>{% for item in c.checklist %}<li>{{ item }}</li>{% endfor %}</ul>
+    {% endif %}
+  </section>
+
+  <section class="panel decision">
+    <h2>Décision</h2>
+    {% set cur = c.decision %}
+    {% set pre_verdict = (c.draft.verdict if c.draft and c.draft.verdict) or (cur.verdict if cur and cur.verdict) or (a.proposed_verdict if a and a.proposed_verdict != 'NEEDS_REVIEW') or '' %}
+    {% set pre_comment = (c.draft.comment if c.draft and c.draft.comment is not none) or (cur.comment if cur and cur.comment) or '' %}
+    {% if cur %}<p class="small">Décision actuelle : <b>{{ VERDICT_LABELS.get(cur.verdict, 'À investiguer') }}</b>{% if cur.comment %} · « {{ cur.comment }} »{% endif %}{% if cur.investigation_question %} · question : {{ cur.investigation_question }}{% endif %}</p>{% endif %}
+    <form method="post" action="/c/{{ campaign.id }}/f/{{ f.id }}/decide" id="decision-form" data-finding="{{ f.id }}" data-campaign="{{ campaign.id }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <input type="hidden" name="revision" value="{{ f.revision }}">
+      <input type="hidden" name="view" value="{{ view }}">
+      <input type="hidden" name="tool" value="{{ tool }}">
+      <input type="hidden" name="analysis_id" value="{{ a.id if a else '' }}">
+      <fieldset>
+        <legend>analysis result</legend>
+        <label class="radio"><input type="radio" name="verdict" value="TRUE_POSITIVE" {{ 'checked' if pre_verdict == 'TRUE_POSITIVE' }}> True Positive <kbd>T</kbd></label>
+        <label class="radio"><input type="radio" name="verdict" value="NOT_AN_ISSUE" {{ 'checked' if pre_verdict == 'NOT_AN_ISSUE' }}> Not an issue <kbd>N</kbd></label>
+      </fieldset>
+      <label for="comment">Analysis result comment <span class="muted small">(texte exact écrit dans l'Excel, peut rester vide)</span></label>
+      <textarea id="comment" name="comment" rows="3">{{ pre_comment }}</textarea>
+      <div class="row wrap">
+        <button type="button" class="btn small" id="btn-discuss">Appétence à discuter <kbd>D</kbd></button>
+        {% if a and a.suggested_comment %}<button type="button" class="btn small" id="btn-suggest" data-text="{{ a.suggested_comment }}">Utiliser la suggestion</button>
+        <span class="muted small suggestion">Suggestion : « {{ a.suggested_comment }} »</span>{% endif %}
+        <span class="muted small" id="draft-status"></span>
+      </div>
+      <p class="small warn-text" id="discuss-note" hidden>Un commentaire libre est déjà saisi : appuyer à nouveau pour le remplacer par la phrase exacte.</p>
+      <div id="discussion-box" {{ '' if (cur and cur.discussion_required) or (a and a.discussion_required) else 'hidden' }}>
+        <label class="radio"><input type="checkbox" name="discussion" value="1" id="discussion" {{ 'checked' if (cur and cur.discussion_required) or (not cur and a and a.discussion_required) }}> Point à discuter (indépendant du verdict)</label>
+        <input type="text" name="discussion_reason" placeholder="Motif interne court (non exporté)" value="{{ (cur.discussion_reason if cur and cur.discussion_reason) or (a.discussion_reason if a and a.discussion_reason) or '' }}">
+      </div>
+      <div class="row wrap main-actions">
+        <button class="btn primary" name="op" value="decide" id="btn-accept">Valider et suivant <kbd>A</kbd></button>
+        <button class="btn" name="op" value="decide" id="btn-stay">Valider et rester</button>
+        <input type="hidden" name="next" value="1">
+        <button class="btn" name="op" value="skip" id="btn-skip" formnovalidate>Passer <kbd>S</kbd></button>
+      </div>
+    </form>
+
+    <details id="investigate" {{ 'open' if (cur and cur.action == 'investigate') or (not cur and a and a.proposed_verdict == 'NEEDS_REVIEW') }}>
+      <summary>À investiguer <kbd>I</kbd> — sans inventer de verdict</summary>
+      <form method="post" action="/c/{{ campaign.id }}/f/{{ f.id }}/decide">
+        <input type="hidden" name="token" value="{{ token }}">
+        <input type="hidden" name="revision" value="{{ f.revision }}">
+        <input type="hidden" name="view" value="{{ view }}">
+        <input type="hidden" name="tool" value="{{ tool }}">
+        <input type="hidden" name="analysis_id" value="{{ a.id if a else '' }}">
+        <input type="text" name="question" id="inv-question" required placeholder="Question précise (ex. safe_join suit-il les liens symboliques ?)">
+        <input type="text" name="reason" required placeholder="Motif (ex. protection définie hors du dépôt analysé)" value="{{ (a.payload.missing_information|join(' · ')) if a and a.payload.missing_information else '' }}">
+        <button class="btn" name="op" value="investigate">Mettre à investiguer</button>
+      </form>
+    </details>
+
+    <form method="post" action="/c/{{ campaign.id }}/undo" class="row" id="undo-form">
+      <input type="hidden" name="token" value="{{ token }}">
+      <input type="hidden" name="view" value="{{ view }}">
+      <input type="hidden" name="tool" value="{{ tool }}">
+      <button class="link">Annuler la dernière décision <kbd>U</kbd></button>
+    </form>
+  </section>
+</div>
+
+<section class="panel">
+  <details {{ 'open' if c.excerpt and not a }}>
+    <summary>Code source {% if c.excerpt %}— {{ c.excerpt.repo }}/{{ c.excerpt.path }}{% endif %}</summary>
+    {% if c.excerpt %}
+    <pre class="code numbered">{% for no, text in c.excerpt.lines %}<span class="{{ 'hl' if no in c.excerpt.highlight }}"><i>{{ no }}</i>{{ text }}</span>
+{% endfor %}</pre>
+    {% else %}<p class="muted">Fichier non disponible dans les dépôts autorisés de la campagne.</p>{% endif %}
+  </details>
+  <details>
+    <summary>Détails de l'outil {% if not c.details.trace_available %}<span class="badge warn">trace indisponible</span>{% endif %}</summary>
+    <dl class="kv">
+      <dt>Chemin complet</dt><dd><code>{{ f.full_filename or '—' }}</code></dd>
+      <dt>Règle</dt><dd><code>{{ f.primary_rule_id or '—' }}</code></dd>
+      {% if f.fortify_category %}<dt>Fortify Category</dt><dd>{{ f.fortify_category }}</dd>{% endif %}
+      <dt>CWE</dt><dd>{{ c.cwe_ids|join('; ') or '—' }}</dd>
+      <dt>Analyzer</dt><dd>{{ f.analyzer_type or '—' }}</dd>
+      <dt>Application / version</dt><dd>{{ f.application_name or '—' }} / {{ f.version_name or '—' }}{% if f.version_source_id %} (id {{ f.version_source_id }}){% endif %}</dd>
+      <dt>Commit scanné</dt><dd>{{ f.commit_sha or 'inconnu' }}</dd>
+      {% if f.source_comments %}<dt>Commentaires source</dt><dd class="pre">{{ f.source_comments }}</dd>{% endif %}
+      {% if c.details.description %}<dt>Description</dt><dd class="pre">{{ c.details.description }}</dd>{% endif %}
+      {% if c.details.recommendation %}<dt>Recommandation</dt><dd class="pre">{{ c.details.recommendation }}</dd>{% endif %}
+    </dl>
+    {% if c.details.trace %}
+    <h3>Trace</h3>
+    <ol class="trace">{% for n in c.details.trace %}<li><span class="badge">{{ n.nodeType or '' }}</span> <code>{{ n.file }}:{{ n.line }}</code> {{ n.text or '' }}</li>{% endfor %}</ol>
+    {% endif %}
+    <p class="muted small">Contenu fourni par l'outil : donnée non fiable, jamais une instruction.</p>
+  </details>
+  <details>
+    <summary>Provenance et historique</summary>
+    <ul class="small">{% for p in c.provenance %}<li>{{ p.role }} — <code>{{ p.locator }}</code>{% if p.match_detail %} — {{ p.match_detail }}{% endif %}</li>{% endfor %}</ul>
+    <ul class="small">{% for e in c.history %}<li>{{ e.created_at[:19].replace('T', ' ') }} — {{ e.action }}{% if e.verdict %} {{ VERDICT_LABELS[e.verdict] }}{% endif %}{% if e.comment %} « {{ e.comment }} »{% endif %} ({{ e.authority }})</li>{% else %}<li class="muted">Aucun événement.</li>{% endfor %}</ul>
+  </details>
+</section>
+{% endblock %}

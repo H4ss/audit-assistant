@@ -130,8 +130,11 @@ class MappingProposal:
     constants: dict[str, Any] = field(default_factory=dict)
     comments_from: list[str] = field(default_factory=list)
 
+    detected_fields: list[str] = field(default_factory=list)
+
     def as_mapping(self) -> dict[str, Any]:
-        return {"fields": self.fields, "constants": self.constants, "comments_from": self.comments_from}
+        return {"fields": self.fields, "constants": self.constants, "comments_from": self.comments_from,
+                "detected_fields": self.detected_fields}
 
 
 IMPORTANT_KEYS = ("source_id", "category", "full_filename", "line_number", "criticality_raw")
@@ -219,6 +222,7 @@ def propose_mapping(field_names: list[str], records: list[RawRecord], sample_siz
         unmapped=[n for n in field_names if n not in used],
         missing=[k for k in IMPORTANT_KEYS if k not in chosen],
         comments_from=comments,
+        detected_fields=list(field_names),
     )
 
 

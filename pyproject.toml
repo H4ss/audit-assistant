@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-paladin"
-version = "0.0.1"
+version = "0.2.0"
 description = "Assistant local de triage et de comparaison AppSec (Fortify, rapports MD, Excel)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -39,6 +39,7 @@ paladin = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
 markers = [
     "real: test d'intégration réel opt-in (OpenCode/GLM, Fortify) — exclu de la CI",
 ]

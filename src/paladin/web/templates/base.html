@@ -6,12 +6,51 @@
   <title>{% block title %}Paladin{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', path='paladin.css') }}">
 </head>
-<body>
+<body data-token="{{ token }}">
   <header class="topbar">
     <a class="brand" href="/">Paladin</a>
-    <span class="muted">v{{ version }}</span>
-    {% block topbar %}{% endblock %}
+    {% if campaign %}
+      <a href="/c/{{ campaign.id }}" class="crumb">{{ campaign.name }}</a>
+      {% if campaign.is_demo %}<span class="badge demo" title="Données fictives, propositions simulées">DÉMO</span>{% endif %}
+    {% endif %}
+    {% if counters %}
+    <nav class="chips" aria-label="Compteurs">
+      <a class="chip" href="/c/{{ campaign.id }}/queue?view=todo">À revoir <b>{{ counters.to_review + counters.reexam }}</b></a>
+      <a class="chip" href="/c/{{ campaign.id }}/queue?view=ready">Propositions prêtes <b>{{ counters.proposals_waiting }}</b></a>
+      <a class="chip" href="/c/{{ campaign.id }}/queue?view=investigating">À investiguer <b>{{ counters.investigating }}</b></a>
+      <a class="chip" href="/c/{{ campaign.id }}/queue?view=validated">Validés <b>{{ counters.validated }}</b></a>
+      {% if counters.stale %}<a class="chip bad" href="/c/{{ campaign.id }}">Excel périmé <b>{{ counters.stale }}</b></a>
+      {% elif counters.not_exported %}<a class="chip warn" href="/c/{{ campaign.id }}">À exporter <b>{{ counters.not_exported }}</b></a>{% endif %}
+    </nav>
+    {% endif %}
+    <span class="spacer"></span>
+    <button type="button" class="link" data-help>Raccourcis <kbd>?</kbd></button>
   </header>
-  <main>{% block content %}{% endblock %}</main>
+  <main>
+    {% if flash %}
+    <div class="flash {{ flash.level }}" role="status">
+      <strong>{{ flash.message }}</strong>
+      {% if flash.details %}<ul>{% for d in flash.details %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <dialog id="help">
+    <h2>Raccourcis clavier</h2>
+    <p class="muted">Inactifs pendant la saisie d'un texte. Entrée seule ne valide jamais.</p>
+    <table class="kbd-table">
+      <tr><td><kbd>T</kbd> / <kbd>N</kbd></td><td>Choisir True Positive / Not an issue</td></tr>
+      <tr><td><kbd>A</kbd></td><td>Valider et passer au suivant</td></tr>
+      <tr><td><kbd>D</kbd></td><td>Appétence à discuter (phrase exacte)</td></tr>
+      <tr><td><kbd>C</kbd></td><td>Aller au commentaire</td></tr>
+      <tr><td><kbd>I</kbd></td><td>À investiguer</td></tr>
+      <tr><td><kbd>S</kbd> ou <kbd>→</kbd></td><td>Passer (suivant sans décider)</td></tr>
+      <tr><td><kbd>←</kbd></td><td>Précédent</td></tr>
+      <tr><td><kbd>U</kbd></td><td>Annuler la dernière décision</td></tr>
+      <tr><td><kbd>Échap</kbd></td><td>Quitter le champ de saisie</td></tr>
+    </table>
+    <form method="dialog"><button>Fermer</button></form>
+  </dialog>
+  <script src="{{ url_for('static', path='paladin.js') }}"></script>
 </body>
 </html>

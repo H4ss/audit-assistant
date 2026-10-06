@@ -14,3 +14,6 @@ Mise à jour à chaque palier. Le README n'annonce que ce qui est vérifié.
 - **Contexte de l'identifiant** : outil | application | version déclarée par la source. Si une source change d'application ou de version déclarée, ses findings sont traités comme nouveaux (pas de fusion implicite).
 - **Inférence de mapping** : heuristique (synonymes FR/EN et forme des valeurs). Elle ne remplace pas la validation ; la proposition par l'agent pour les formats atypiques arrive au palier P4.
 - **Divergences Excel/MD** : sans priorité de champ validée, la valeur de l'inventaire reste affichée et le champ est marqué « à résoudre ».
+- **Propositions de la démo** : écrites à la main et marquées « proposition simulée » ; aucune ne provient d'un modèle.
+- **Interface** : un seul analyste (« analyste ») ; pas de multi-utilisateur. Les raccourcis et brouillons sont testés dans Chromium (CI Linux) ; Edge/Firefox sous Windows non testés automatiquement.
+- **Création de campagne** : par fichier JSON (`campaign create`) ; l'assistant graphique de création viendra avec le diagnostic (P4).
