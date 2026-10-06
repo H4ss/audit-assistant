@@ -1,0 +1,31 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": {
+    "id": 900006,
+    "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900006",
+    "brief": "Synthetic description for Path Manipulation.",
+    "recommendation": "Synthetic recommendation for Path Manipulation.",
+    "functionName": "download_invoice",
+    "traceNodes": [
+      {
+        "file": "/build/workspace/shopapp/shop-api/app/files.py",
+        "line": 9,
+        "nodeType": "source",
+        "text": "request.args.get"
+      },
+      {
+        "file": "/build/workspace/shopapp/billing-lib/billing/paths.py",
+        "line": 5,
+        "nodeType": "pass",
+        "text": "safe_join"
+      },
+      {
+        "file": "/build/workspace/shopapp/shop-api/app/files.py",
+        "line": 11,
+        "nodeType": "sink",
+        "text": "download_invoice"
+      }
+    ],
+    "comments": []
+  }
+}

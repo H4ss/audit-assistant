@@ -1,0 +1,22 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": [
+    {
+      "id": 30001,
+      "name": "release",
+      "project": {
+        "id": 503,
+        "name": "TwinApp"
+      }
+    },
+    {
+      "id": 30002,
+      "name": "release",
+      "project": {
+        "id": 503,
+        "name": "TwinApp"
+      }
+    }
+  ],
+  "count": 2
+}

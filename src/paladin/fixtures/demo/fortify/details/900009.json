@@ -1,0 +1,12 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": {
+    "id": 900009,
+    "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900009",
+    "brief": "Synthetic description for Insecure Randomness.",
+    "recommendation": "Synthetic recommendation for Insecure Randomness.",
+    "functionName": "new_payment_link_token",
+    "traceNodes": null,
+    "comments": []
+  }
+}

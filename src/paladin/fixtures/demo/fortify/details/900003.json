@@ -1,0 +1,12 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": {
+    "id": 900003,
+    "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900003",
+    "brief": "Synthetic description for SQL Injection.",
+    "recommendation": "Synthetic recommendation for SQL Injection.",
+    "functionName": "product_by_category",
+    "traceNodes": null,
+    "comments": []
+  }
+}

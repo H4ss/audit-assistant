@@ -1,0 +1,25 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": {
+    "id": 900005,
+    "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900005",
+    "brief": "Synthetic description for Cross-Site Scripting: Reflected.",
+    "recommendation": "Synthetic recommendation for Cross-Site Scripting: Reflected.",
+    "functionName": "render_profile",
+    "traceNodes": [
+      {
+        "file": "/build/workspace/shopapp/shop-api/app/profile.py",
+        "line": 7,
+        "nodeType": "source",
+        "text": "request.args.get"
+      },
+      {
+        "file": "/build/workspace/shopapp/shop-api/app/profile.py",
+        "line": 9,
+        "nodeType": "sink",
+        "text": "render_profile"
+      }
+    ],
+    "comments": []
+  }
+}

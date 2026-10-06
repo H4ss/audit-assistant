@@ -1,0 +1,18 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": [
+    {
+      "id": 501,
+      "name": "ShopApp"
+    },
+    {
+      "id": 502,
+      "name": "LegacyPortal"
+    },
+    {
+      "id": 503,
+      "name": "TwinApp"
+    }
+  ],
+  "count": 3
+}

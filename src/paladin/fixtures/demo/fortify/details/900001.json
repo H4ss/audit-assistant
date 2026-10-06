@@ -1,0 +1,25 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": {
+    "id": 900001,
+    "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900001",
+    "brief": "Synthetic description for SQL Injection.",
+    "recommendation": "Synthetic recommendation for SQL Injection.",
+    "functionName": "list_orders",
+    "traceNodes": [
+      {
+        "file": "/build/workspace/shopapp/shop-api/app/orders.py",
+        "line": 8,
+        "nodeType": "source",
+        "text": "request.args.get"
+      },
+      {
+        "file": "/build/workspace/shopapp/shop-api/app/orders.py",
+        "line": 12,
+        "nodeType": "sink",
+        "text": "list_orders"
+      }
+    ],
+    "comments": []
+  }
+}

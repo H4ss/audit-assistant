@@ -1,0 +1,22 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": [
+    {
+      "id": 20001,
+      "name": "Release 2.1",
+      "project": {
+        "id": 502,
+        "name": "LegacyPortal"
+      }
+    },
+    {
+      "id": 20002,
+      "name": "release-candidate",
+      "project": {
+        "id": 502,
+        "name": "LegacyPortal"
+      }
+    }
+  ],
+  "count": 2
+}

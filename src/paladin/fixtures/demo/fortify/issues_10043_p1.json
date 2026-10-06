@@ -1,0 +1,51 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": [
+    {
+      "id": 950001,
+      "issueInstanceId": "EEEEEEEEEEEEEEEEEEEEEEEE00950001",
+      "issueName": "SQL Injection",
+      "kingdom": "Input Validation and Representation",
+      "friority": "Critical",
+      "primaryLocation": "orders.py",
+      "lineNumber": 12,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/orders.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0001-4C1A-9E57-0000000000A1",
+      "projectVersionId": 10043,
+      "projectName": "ShopApp",
+      "projectVersionName": "dev",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 89"
+      ]
+    },
+    {
+      "id": 950002,
+      "issueInstanceId": "EEEEEEEEEEEEEEEEEEEEEEEE00950002",
+      "issueName": "Cross-Site Scripting: Reflected",
+      "kingdom": "Input Validation and Representation",
+      "friority": "Critical",
+      "primaryLocation": "search.py",
+      "lineNumber": 7,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/search.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0002-4C1A-9E57-0000000000B2",
+      "projectVersionId": 10043,
+      "projectName": "ShopApp",
+      "projectVersionName": "dev",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 79",
+        "CWE ID 80"
+      ]
+    }
+  ],
+  "count": 2,
+  "start": 0,
+  "limit": 8
+}

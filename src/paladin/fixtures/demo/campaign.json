@@ -1,0 +1,51 @@
+{
+  "_comment": "Campagne de démonstration FICTIVE. Les champs Fortify et leur mapping sont synthétiques, à vérifier sur l'instance réelle (section 5).",
+  "id": "demo",
+  "name": "Démo ShopApp (données fictives)",
+  "application_name": "ShopApp",
+  "target_workbook": "audit_shopapp_demo.xlsx",
+  "repos": [
+    {"name": "shop-api", "path": "repos/shop-api", "commit": "demo-0001", "scanner_roots": ["/build/workspace/shopapp/shop-api/"]},
+    {"name": "billing-lib", "path": "repos/billing-lib", "commit": "demo-0001", "scanner_roots": ["/build/workspace/shopapp/billing-lib/"]}
+  ],
+  "tools": [
+    {
+      "label": "Fortify",
+      "kind": "fortify",
+      "sheet_name": "Fortify",
+      "sources": [{"role": "findings", "kind": "fortify_fixture", "path": "fortify"}],
+      "fortify": {
+        "application_name": "ShopApp",
+        "version_name": "release",
+        "scanned_commit": "demo-0001",
+        "field_map": {
+          "source_id": "issueInstanceId",
+          "category": "issueName",
+          "fortify_category": "kingdom",
+          "criticality_raw": "friority",
+          "primary_location": "primaryLocation",
+          "line_number": "lineNumber",
+          "full_filename": "fullFileName",
+          "analyzer_type": "analyzer",
+          "primary_rule_id": "primaryRuleGuid",
+          "cwe_ids": "cwe"
+        }
+      }
+    },
+    {
+      "label": "ToolB",
+      "kind": "excel_md",
+      "sheet_name": "ToolB",
+      "sources": [
+        {"role": "inventory", "kind": "excel", "path": "@target", "sheet": "ToolB"},
+        {"role": "details", "kind": "md", "path": "toolb/toolb_details.md", "profile": "heading-kv-v1"}
+      ]
+    },
+    {
+      "label": "ToolC",
+      "kind": "md",
+      "sheet_name": null,
+      "sources": [{"role": "findings", "kind": "md", "path": "toolc/toolc_report.md", "profile": "table-v1"}]
+    }
+  ]
+}
