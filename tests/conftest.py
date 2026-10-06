@@ -26,3 +26,19 @@ def conn(settings):
     c = open_database(settings.db_path)
     yield c
     c.close()
+
+
+@pytest.fixture()
+def demo(settings, conn):
+    """Campagne de démo semée et importée (Fortify + ToolB ; ToolC bloqué en attente de profil)."""
+    from paladin import store
+    from paladin.demo import seed_demo
+    from paladin.importers.pipeline import import_tool
+
+    seed_demo(settings, conn)
+    reports = {t["label"]: import_tool(settings, conn, "demo", t["label"]) for t in store.list_tools(conn, "demo")}
+    return {"settings": settings, "conn": conn, "reports": reports}
+
+
+def finding_by_source(conn, source_id):
+    return conn.execute("SELECT * FROM finding WHERE source_id = ?", (source_id,)).fetchone()

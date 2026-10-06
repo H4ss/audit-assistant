@@ -8,7 +8,7 @@ Le modèle **propose**, l'analyste **valide**. L'Excel ne reçoit que des décis
 
 ## État actuel
 
-Palier **P0 — socle et contrats** : contrats métier, schéma SQLite et migrations, CLI, fixtures synthétiques, démo, diagnostic de base, CI Windows/Linux. Les imports, la revue, l'export et l'agent arrivent aux paliers suivants (voir le backlog).
+Paliers livrés : **P0 — socle et contrats**, **P1 — imports multi-entrées et export Excel**. La revue dans l'interface (P2) et l'agent OpenCode/GLM (P3) arrivent ensuite (voir le backlog). À ce stade, les décisions existent dans le moteur et les tests, mais pas encore dans l'interface.
 
 Combinaisons vérifiées : Python 3.14 sur Linux (poste de développement) ; Windows/Linux 3.14 et Linux 3.12 via la CI. **Aucune connexion Fortify réelle ni GLM réelle n'a été vérifiée à ce stade.**
 
@@ -77,6 +77,14 @@ Changer avec `--home <dossier>` ou la variable `PALADIN_HOME`. Paladin refuse un
 | `python -m paladin serve [--demo] [--port N]` | Lancer l'interface locale |
 | `python -m paladin doctor [--json]` | Diagnostic : Python, dossiers, base, OpenCode, Fortify |
 | `python -m paladin status` | Lister les campagnes |
+| `python -m paladin import [--tool X] [--resume]` | Importer les sources déclarées de la campagne |
+| `python -m paladin inspect <fichier>` | Détecter les champs d'un rapport (xlsx, csv, md, sarif) et proposer un mapping |
+| `python -m paladin profile list\|show\|validate <id>` | Valider une fois le mapping proposé d'une nouvelle source |
+| `python -m paladin export [--final]` | Écrire les décisions validées (copie de travail par défaut) |
+
+## Multi-entrées
+
+Une source se déclare par son rôle (`findings`, `inventory`, `details`) et son type : Excel (fichier séparé ou onglet du classeur cible), CSV, Markdown (profils `heading-kv-v1`, `table-v1`), SARIF 2.1.0 ou Fortify. Pour une source inconnue, Paladin **propose** un mapping à partir des en-têtes et des valeurs (synonymes FR/EN, `chemin:ligne`, CWE, sévérités). La proposition est validée une fois, puis réutilisée pour toute source de même structure. Paladin infère aussi une **famille interne** (CWE d'abord, puis mots-clés, base toujours tracée) et une **route d'analyse** (flux de données, crypto, secret, configuration, dépendance) qui fixe les vérifications à mener. La catégorie brute de l'outil reste la seule exportée.
 
 ## Tests
 

@@ -96,3 +96,23 @@ def test_serve_starts_and_stops(home: Path):
     finally:
         proc.terminate()
         proc.wait(timeout=15)
+
+
+def test_inspect_proposes_mapping_for_unknown_csv(tmp_path, capsys):
+    p = tmp_path / "rapport.csv"
+    p.write_text("Ref,Titre,Gravité,Fichier,Ligne\nZ-1,XSS,High,a/b.py,3\n", encoding="utf-8")
+    assert cli.main(["inspect", str(p)]) == 0
+    out = capsys.readouterr().out
+    assert "'Gravité'" in out and "criticality_raw" in out and "non appliquée" in out
+
+
+def test_demo_import_validate_profile_and_export(home, capsys):
+    assert cli.main(["demo"]) == 0
+    out = capsys.readouterr().out
+    assert "ToolC" in out and "BLOQUÉ" in out
+    pid = out.split("profile show ")[1].split()[0]
+    assert cli.main(["profile", "validate", pid]) == 0
+    assert cli.main(["import", "--tool", "ToolC"]) == 0
+    assert "NON RECONNU" in capsys.readouterr().out
+    assert cli.main(["export"]) == 0
+    assert "Excel à jour" in capsys.readouterr().out

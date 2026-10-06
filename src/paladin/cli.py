@@ -73,10 +73,16 @@ def cmd_demo(args: argparse.Namespace) -> int:
     conn = open_database(settings.db_path)
     try:
         result = seed_demo(settings, conn)
+        state = "créée" if result.created else "déjà présente (utiliser --reset pour repartir de zéro)"
+        print(f"Démo {state} — données FICTIVES, propositions simulées (aucune connexion GLM).")
+        if result.created:
+            from paladin import store
+            from paladin.importers.pipeline import import_tool
+
+            for tool in store.list_tools(conn, result.campaign_id):
+                print_import_report(import_tool(settings, conn, result.campaign_id, tool["label"]))
     finally:
         conn.close()
-    state = "créée" if result.created else "déjà présente (utiliser --reset pour repartir de zéro)"
-    print(f"Démo {state} — données FICTIVES, propositions simulées (aucune connexion GLM).")
     print(f"Espace de démo : {home}")
     print(f"Classeur cible : {result.workbook}")
     print(f"Lancer l'interface : python -m paladin serve --home \"{home}\"")
@@ -162,6 +168,152 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _open(args: argparse.Namespace, demo: bool = False):
+    home = _home_arg(args, demo=demo)
+    if not args.home and not demo and not (home / "paladin.toml").exists():
+        demo_home = default_demo_home().resolve()
+        if (demo_home / "paladin.toml").exists():
+            home = demo_home
+    settings = load_settings(home)
+    if not settings.db_path.exists():
+        raise SystemExit(f"Aucune base dans {home}. → `python -m paladin init` ou `python -m paladin demo`.")
+    return settings, open_database(settings.db_path)
+
+
+def print_import_report(report) -> None:
+    print(report.summary())
+    for src in report.sources:
+        print(f"  · {src.role} ({src.kind}) : {src.records} enregistrement(s), complétude {src.completeness} — {src.profile}")
+        for note in src.notes:
+            print(f"      note : {note}")
+        for part in src.unrecognized:
+            print(f"      NON RECONNU {part['locator']} : {part['reason']}")
+        for part in src.ignored:
+            print(f"      ignoré (profil) {part['locator']} : {part['reason']}")
+    if report.error:
+        print(f"  ! Collecte interrompue : {report.error['message']}\n    → {report.error['action']}")
+    if report.blocked:
+        print(f"  ! BLOQUÉ : {report.blocked['message']}\n    → {report.blocked['action']}")
+        if "proposal" in report.blocked:
+            print_proposal(report.blocked["proposal"], report.blocked.get("basis", {}),
+                           report.blocked.get("unmapped", []), report.blocked.get("missing", []))
+
+
+def print_proposal(mapping: dict, basis: dict, unmapped: list, missing: list) -> None:
+    print("    Mapping proposé (champ source → clé interne) :")
+    for key, spec in mapping.get("fields", {}).items():
+        t = spec.get("transform", "text")
+        print(f"      {spec['source']!r:28} → {key}{'' if t == 'text' else f' [{t}]'}  ({basis.get(key, 'déclaré')})")
+    if mapping.get("comments_from"):
+        print(f"      commentaires source : {mapping['comments_from']}")
+    if unmapped:
+        print(f"    Champs non couverts (conservés en données brutes) : {unmapped}")
+    if missing:
+        print(f"    Clés importantes non trouvées : {missing}")
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    from paladin import store
+    from paladin.importers.pipeline import import_tool
+
+    settings, conn = _open(args)
+    try:
+        tools = [args.tool] if args.tool else [t["label"] for t in store.list_tools(conn, args.campaign)]
+        code = 0
+        for label in tools:
+            report = import_tool(settings, conn, args.campaign, label, resume=args.resume)
+            print_import_report(report)
+            code = code or (3 if report.blocked else 0)
+        return code
+    finally:
+        conn.close()
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    from paladin.excel.export import export_workbook
+
+    settings, conn = _open(args)
+    try:
+        result = export_workbook(settings, conn, args.campaign, mode="final" if args.final else "working_copy",
+                                 destination=Path(args.to).resolve() if args.to else None)
+    finally:
+        conn.close()
+    if result.status != "verified":
+        print(f"Export {result.status} : {result.error}\n→ {result.action}")
+        return 4
+    s = result.summary
+    print(f"Excel à jour : {result.destination}")
+    print(f"  cellules écrites {s['cells_written']}, lignes ajoutées {s['rows_appended']}, "
+          f"findings à jour {s['findings_up_to_date']}")
+    print(f"  bloqués {len(s['blocked'])}, sans cible {len(s['without_target'])}, "
+          f"lignes Excel non appariées {len(s['unmatched_rows'])}, valeurs humaines conservées {len(s['preserved_human_values'])}")
+    for b in s["blocked"]:
+        print(f"    BLOQUÉ {b['sheet']} {b['source_id']} : {b['reason']}")
+    if s["tools_without_sheet"]:
+        print(f"  outils sans onglet (hors export) : {s['tools_without_sheet']}")
+    if result.backup_path:
+        print(f"  sauvegarde : {result.backup_path}")
+    print(f"  manifeste : {result.manifest_path}")
+    return 0
+
+
+def cmd_inspect(args: argparse.Namespace) -> int:
+    """Multi-entrées : détecter les champs d'un fichier et proposer un mapping."""
+    from paladin.importers.mapping import propose_mapping
+    from paladin.importers.markdown import read_markdown
+    from paladin.importers.sarif import read_sarif
+    from paladin.importers.tabular import read_csv, read_excel
+
+    path = Path(args.file)
+    suffix = path.suffix.lower()
+    if suffix in (".xlsx", ".xlsm"):
+        read = read_excel(path, args.sheet)
+    elif suffix in (".csv", ".tsv", ".txt"):
+        read = read_csv(path)
+    elif suffix in (".sarif", ".json"):
+        read = read_sarif(path)
+    elif suffix == ".md":
+        read = read_markdown(path, args.profile or "heading-kv-v1")
+    else:
+        print(f"Format non pris en charge : {suffix}. Formats : xlsx, csv, md, sarif.")
+        return 2
+    print(f"{path.name} : {len(read.records)} enregistrement(s), {len(read.field_names)} champ(s), complétude {read.completeness.value}")
+    for part in read.unrecognized:
+        print(f"  NON RECONNU {part.locator} : {part.reason}")
+    prop = propose_mapping(read.field_names, read.records)
+    print_proposal(prop.as_mapping(), {g.key: g.basis for g in prop.guesses}, prop.unmapped, prop.missing)
+    print("  (proposition non appliquée : elle devient un profil après validation)")
+    return 0
+
+
+def cmd_profile(args: argparse.Namespace) -> int:
+    from paladin.importers import profiles
+
+    settings, conn = _open(args)
+    try:
+        if args.action == "list":
+            for p in profiles.list_profiles(conn, args.campaign):
+                print(f"{p['id']}  {p['name']} v{p['version']}  {p['status']}  ({p['proposed_by']})")
+            return 0
+        if not args.profile_id:
+            print("Identifiant de profil requis.")
+            return 2
+        prof = profiles.get(conn, args.profile_id)
+        if args.action == "show":
+            print(f"{prof['name']} v{prof['version']} — {prof['status']} — source {prof['source_kind']}")
+            print_proposal(prof["mapping"], {}, [], [])
+            print(f"Valider : python -m paladin profile validate {prof['id']}")
+            return 0
+        if args.action == "validate":
+            mapping = json.loads(Path(args.mapping).read_text(encoding="utf-8")) if args.mapping else None
+            prof = profiles.validate(conn, args.profile_id, mapping)
+            print(f"Profil {prof['name']} v{prof['version']} validé. Relancer l'import.")
+            return 0
+    finally:
+        conn.close()
+    return 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="paladin", description="Assistant local de triage AppSec.")
     parser.add_argument("--version", action="version", version=f"paladin {__version__}")
@@ -185,6 +337,27 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_doctor)
     add("status", "Lister les campagnes.").set_defaults(func=cmd_status)
+    p = add("import", "Importer les sources d'une campagne.")
+    p.add_argument("--campaign", default="demo")
+    p.add_argument("--tool", help="Un seul outil (libellé).")
+    p.add_argument("--resume", action="store_true", help="Reprendre une collecte Fortify interrompue.")
+    p.set_defaults(func=cmd_import)
+    p = add("export", "Exporter les décisions validées vers l'Excel.")
+    p.add_argument("--campaign", default="demo")
+    p.add_argument("--final", action="store_true", help="Mettre à jour le classeur cible désigné (sinon copie de travail).")
+    p.add_argument("--to", help="Destination explicite.")
+    p.set_defaults(func=cmd_export)
+    p = sub.add_parser("inspect", help="Détecter les champs d'un rapport et proposer un mapping (multi-entrées).")
+    p.add_argument("file")
+    p.add_argument("--sheet")
+    p.add_argument("--profile", help="Profil MD (heading-kv-v1, table-v1).")
+    p.set_defaults(func=cmd_inspect)
+    p = add("profile", "Profils d'entrée : lister, afficher, valider.")
+    p.add_argument("action", choices=["list", "show", "validate"])
+    p.add_argument("profile_id", nargs="?")
+    p.add_argument("--campaign", default="demo")
+    p.add_argument("--mapping", help="Fichier JSON de mapping corrigé à valider.")
+    p.set_defaults(func=cmd_profile)
     return parser
 
 
