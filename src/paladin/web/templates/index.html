@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>Campagnes</h1>
+  <p class="muted">Dossier de données : <code>{{ home }}</code></p>
+  {% if campaigns %}
+  <ul class="list">
+    {% for c in campaigns %}
+    <li><strong>{{ c.name }}</strong> <span class="muted">({{ c.id }}{% if c.is_demo %}, démo — données fictives{% endif %})</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Aucune campagne. Lancer <code>python -m paladin demo</code> pour une démonstration.</p>
+  {% endif %}
+</section>
+{% endblock %}
