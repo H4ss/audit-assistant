@@ -1,0 +1,35 @@
+{
+  "_aide": "Copier ce fichier, adapter les chemins (relatifs à ce fichier ou absolus), puis : python -m paladin campaign create mon-fichier.json",
+  "id": "shopapp-2026",
+  "name": "ShopApp — audit 2026",
+  "target_workbook": "C:/Audits/ShopApp/audit_shopapp.xlsx",
+  "repos": [
+    {
+      "_aide": "Dépôts lus (jamais modifiés). scanner_roots : préfixe de chemin vu par le scanner, retiré pour retrouver le fichier.",
+      "name": "shop-api",
+      "path": "C:/Code/shop-api",
+      "commit": "",
+      "scanner_roots": ["/build/workspace/shopapp/shop-api/"]
+    }
+  ],
+  "tools": [
+    {
+      "_aide": "Concurrent livrant un Excel (inventaire, lignes à compléter) + un rapport Markdown (détails).",
+      "label": "ToolB",
+      "kind": "excel_md",
+      "sheet_name": "ToolB",
+      "sources": [
+        {"role": "inventory", "kind": "excel", "path": "@target", "sheet": "ToolB",
+         "_aide": "@target = l'onglet du classeur cible ; sinon le chemin d'un fichier Excel séparé du concurrent."},
+        {"role": "details", "kind": "md", "path": "C:/Audits/ShopApp/toolb_report.md", "profile": "heading-kv-v1"}
+      ]
+    },
+    {
+      "_aide": "Outil livrant un export CSV ou SARIF : Paladin proposera un mapping à valider une fois dans l'interface.",
+      "label": "ToolC",
+      "kind": "csv",
+      "sheet_name": null,
+      "sources": [{"role": "findings", "kind": "csv", "path": "C:/Audits/ShopApp/toolc_export.csv"}]
+    }
+  ]
+}
