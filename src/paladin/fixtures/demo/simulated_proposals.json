@@ -1,0 +1,290 @@
+{
+  "_comment": "Propositions SIMULÉES pour la démo : écrites à la main, aucun modèle appelé. 900011 et 900013 restent sans proposition.",
+  "proposals": {
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900001": {
+      "proposed_verdict": "TRUE_POSITIVE",
+      "summary": "Le paramètre HTTP `customer` est concaténé dans la requête SQL sans paramétrage ni validation.",
+      "suggested_analysis_result_comment": "SQL built by concatenating the `customer` request parameter.",
+      "evidence": [
+        {
+          "file": "shop-api/app/orders.py",
+          "line_start": 8,
+          "excerpt": "customer = request.args.get(\"customer\", \"\")",
+          "note": "source contrôlée par l'utilisateur"
+        },
+        {
+          "file": "shop-api/app/orders.py",
+          "line_start": 12,
+          "excerpt": "WHERE customer = '\" + customer",
+          "note": "concaténation dans le SQL"
+        }
+      ],
+      "checks": [
+        {
+          "name": "source_controlee",
+          "status": "pass"
+        },
+        {
+          "name": "protection_effective",
+          "status": "fail"
+        }
+      ],
+      "model_confidence": {
+        "level": "high"
+      },
+      "next_action": "Valider."
+    },
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900002": {
+      "proposed_verdict": "NOT_AN_ISSUE",
+      "summary": "La requête est paramétrée : le terme est passé en paramètre lié, jamais concaténé dans le SQL.",
+      "evidence": [
+        {
+          "file": "shop-api/app/products.py",
+          "line_start": 11,
+          "excerpt": "WHERE name LIKE ?"
+        },
+        {
+          "file": "shop-api/app/products.py",
+          "line_start": 12,
+          "excerpt": "run_query(sql, (\"%\" + term + \"%\",))"
+        }
+      ],
+      "checks": [
+        {
+          "name": "source_controlee",
+          "status": "pass"
+        },
+        {
+          "name": "protection_effective",
+          "status": "pass"
+        }
+      ],
+      "model_confidence": {
+        "level": "high"
+      }
+    },
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900003": {
+      "proposed_verdict": "NOT_AN_ISSUE",
+      "summary": "La valeur concaténée est forcée en entier par `int()` : aucune injection possible. Trace scanner indisponible.",
+      "evidence": [
+        {
+          "file": "shop-api/app/products.py",
+          "line_start": 16,
+          "excerpt": "str(int(category_id))"
+        }
+      ],
+      "assumptions": [
+        "`int()` lève une exception sur une entrée non numérique."
+      ],
+      "checks": [
+        {
+          "name": "protection_effective",
+          "status": "pass"
+        }
+      ],
+      "model_confidence": {
+        "level": "medium"
+      }
+    },
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900004": {
+      "proposed_verdict": "TRUE_POSITIVE",
+      "summary": "Le terme de recherche est renvoyé dans le HTML sans encodage : XSS réfléchi.",
+      "evidence": [
+        {
+          "file": "shop-api/app/search.py",
+          "line_start": 5
+        },
+        {
+          "file": "shop-api/app/search.py",
+          "line_start": 7,
+          "excerpt": "\"<h1>Résultats pour \" + term"
+        }
+      ],
+      "checks": [
+        {
+          "name": "source_controlee",
+          "status": "pass"
+        },
+        {
+          "name": "protection_effective",
+          "status": "fail"
+        }
+      ],
+      "model_confidence": {
+        "level": "high"
+      }
+    },
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900005": {
+      "proposed_verdict": "NOT_AN_ISSUE",
+      "summary": "La valeur est encodée par `html.escape(..., quote=True)` avant insertion.",
+      "evidence": [
+        {
+          "file": "shop-api/app/profile.py",
+          "line_start": 8,
+          "excerpt": "html.escape(nickname, quote=True)"
+        }
+      ],
+      "checks": [
+        {
+          "name": "protection_effective",
+          "status": "pass"
+        }
+      ],
+      "model_confidence": {
+        "level": "high"
+      }
+    },
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900006": {
+      "proposed_verdict": "NEEDS_REVIEW",
+      "summary": "La protection `safe_join` est définie dans billing-lib ; son effet sur les liens symboliques n'a pas été examiné.",
+      "evidence": [
+        {
+          "file": "shop-api/app/files.py",
+          "line_start": 10,
+          "excerpt": "safe_join(DOWNLOAD_ROOT, name)"
+        },
+        {
+          "file": "billing-lib/billing/paths.py",
+          "line_start": 5,
+          "line_end": 7
+        }
+      ],
+      "missing_information": [
+        "Comportement de safe_join avec un lien symbolique sous la racine"
+      ],
+      "checks": [
+        {
+          "name": "protection_effective",
+          "status": "unknown"
+        }
+      ],
+      "model_confidence": {
+        "level": "low"
+      },
+      "next_action": "Lire billing/paths.py et vérifier la résolution des liens symboliques."
+    },
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900007": {
+      "proposed_verdict": "NOT_AN_ISSUE",
+      "summary": "Identifiants d'une base de test jetable, dans un fichier de test non livré.",
+      "suggested_analysis_result_comment": "security appetite to be discussed",
+      "discussion_required": true,
+      "discussion_reason": "Secret en clair dans le dépôt, même de test",
+      "evidence": [
+        {
+          "file": "shop-api/tests/test_config.py",
+          "line_start": 3,
+          "excerpt": "TEST_DB_PASSWORD"
+        }
+      ],
+      "assumptions": [
+        "Le dossier tests/ n'est pas embarqué dans l'artefact déployé."
+      ],
+      "checks": [
+        {
+          "name": "fichier_deploye",
+          "status": "unknown"
+        }
+      ],
+      "model_confidence": {
+        "level": "medium"
+      }
+    },
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900008": {
+      "proposed_verdict": "NOT_AN_ISSUE",
+      "summary": "MD5 sert uniquement de clé de cache non sensible.",
+      "evidence": [
+        {
+          "file": "billing-lib/billing/hashing.py",
+          "line_start": 5
+        },
+        {
+          "file": "billing-lib/billing/hashing.py",
+          "line_start": 7,
+          "excerpt": "hashlib.md5(raw)"
+        }
+      ],
+      "checks": [
+        {
+          "name": "usage_securitaire",
+          "status": "fail"
+        }
+      ],
+      "model_confidence": {
+        "level": "high"
+      }
+    },
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900009": {
+      "proposed_verdict": "TRUE_POSITIVE",
+      "summary": "`random.choice` (non cryptographique) génère un jeton d'accès au lien de paiement.",
+      "suggested_analysis_result_comment": "security appetite to be discussed",
+      "discussion_required": true,
+      "discussion_reason": "Impact métier du lien de paiement à évaluer",
+      "evidence": [
+        {
+          "file": "billing-lib/billing/tokens.py",
+          "line_start": 6
+        },
+        {
+          "file": "billing-lib/billing/tokens.py",
+          "line_start": 8,
+          "excerpt": "random.choice(alphabet)"
+        }
+      ],
+      "checks": [
+        {
+          "name": "usage_securitaire",
+          "status": "pass"
+        }
+      ],
+      "model_confidence": {
+        "level": "high"
+      }
+    },
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900010": {
+      "proposed_verdict": "TRUE_POSITIVE",
+      "summary": "Le paramètre `customer` est écrit tel quel dans le journal via `audit()`.",
+      "evidence": [
+        {
+          "file": "shop-api/app/orders.py",
+          "line_start": 10,
+          "excerpt": "audit(\"list_orders customer=\" + customer)"
+        },
+        {
+          "file": "shop-api/app/logging_utils.py",
+          "line_start": 42,
+          "excerpt": "LOG.info(message)",
+          "note": "référence volontairement fausse (démo)"
+        }
+      ],
+      "checks": [
+        {
+          "name": "source_controlee",
+          "status": "pass"
+        }
+      ],
+      "model_confidence": {
+        "level": "medium"
+      }
+    },
+    "FFFFFFFFFFFFFFFFFFFFFFFF00900012": {
+      "proposed_verdict": "NOT_AN_ISSUE",
+      "summary": "Le message journalisé est une constante : aucune donnée externe.",
+      "evidence": [
+        {
+          "file": "shop-api/app/logging_utils.py",
+          "line_start": 11,
+          "excerpt": "LOG.info(\"startup \" + \"ShopApp\")"
+        }
+      ],
+      "checks": [
+        {
+          "name": "source_controlee",
+          "status": "fail"
+        }
+      ],
+      "model_confidence": {
+        "level": "high"
+      }
+    }
+  }
+}

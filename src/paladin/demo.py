@@ -55,6 +55,26 @@ def reset_demo_home(home: Path) -> None:
     shutil.rmtree(home)
 
 
+def add_simulated_proposals(conn: sqlite3.Connection, campaign_id: str = DEMO_CAMPAIGN_ID) -> int:
+    """Ajoute les propositions simulées (marquées comme telles) aux findings importés."""
+    from paladin.analysis import store_proposal
+    from paladin.contracts import AgentProposal
+
+    data = json.loads((fixtures_root() / "simulated_proposals.json").read_text(encoding="utf-8"))["proposals"]
+    added = 0
+    for source_id, body in data.items():
+        row = conn.execute(
+            "SELECT id, revision FROM finding WHERE campaign_id = ? AND source_id = ?", (campaign_id, source_id)
+        ).fetchone()
+        if row is None or conn.execute("SELECT 1 FROM analysis WHERE finding_id = ?", (row["id"],)).fetchone():
+            continue
+        proposal = AgentProposal.model_validate({"finding_id": row["id"], "input_revision": row["revision"], **body})
+        store_proposal(conn, row["id"], proposal, model_requested="simulation-demo", model_provider="aucun",
+                       model_resolved="simulation", is_simulated=True)
+        added += 1
+    return added
+
+
 def seed_demo(settings: Settings, conn: sqlite3.Connection) -> DemoResult:
     """Crée la campagne de démo. Idempotent : ne touche pas une démo existante."""
     descriptor = load_demo_descriptor()
