@@ -5,15 +5,35 @@
   "application_name": "ShopApp",
   "target_workbook": "audit_shopapp_demo.xlsx",
   "repos": [
-    {"name": "shop-api", "path": "repos/shop-api", "commit": "demo-0001", "scanner_roots": ["/build/workspace/shopapp/shop-api/"]},
-    {"name": "billing-lib", "path": "repos/billing-lib", "commit": "demo-0001", "scanner_roots": ["/build/workspace/shopapp/billing-lib/"]}
+    {
+      "name": "shop-api",
+      "path": "repos/shop-api",
+      "commit": "demo-0001",
+      "scanner_roots": [
+        "/build/workspace/shopapp/shop-api/"
+      ]
+    },
+    {
+      "name": "billing-lib",
+      "path": "repos/billing-lib",
+      "commit": "demo-0001",
+      "scanner_roots": [
+        "/build/workspace/shopapp/billing-lib/"
+      ]
+    }
   ],
   "tools": [
     {
       "label": "Fortify",
       "kind": "fortify",
       "sheet_name": "Fortify",
-      "sources": [{"role": "findings", "kind": "fortify_fixture", "path": "fortify"}],
+      "sources": [
+        {
+          "role": "findings",
+          "kind": "fortify_fixture",
+          "path": "fortify"
+        }
+      ],
       "fortify": {
         "application_name": "ShopApp",
         "version_name": "release",
@@ -37,15 +57,100 @@
       "kind": "excel_md",
       "sheet_name": "ToolB",
       "sources": [
-        {"role": "inventory", "kind": "excel", "path": "@target", "sheet": "ToolB"},
-        {"role": "details", "kind": "md", "path": "toolb/toolb_details.md", "profile": "heading-kv-v1"}
-      ]
+        {
+          "role": "inventory",
+          "kind": "excel",
+          "path": "@target",
+          "sheet": "ToolB",
+          "mapping": {
+            "fields": {
+              "source_id": {
+                "source": "Finding ID"
+              },
+              "application_name": {
+                "source": "Application"
+              },
+              "primary_rule_id": {
+                "source": "Rule"
+              },
+              "full_filename": {
+                "source": "File path"
+              },
+              "line_number": {
+                "source": "Line",
+                "transform": "int"
+              },
+              "criticality_raw": {
+                "source": "Severity"
+              },
+              "cwe_ids": {
+                "source": "CWE",
+                "transform": "cwe_list"
+              }
+            },
+            "constants": {},
+            "comments_from": [
+              "Commentaires"
+            ]
+          }
+        },
+        {
+          "role": "details",
+          "kind": "md",
+          "path": "toolb/toolb_details.md",
+          "profile": "heading-kv-v1",
+          "options": {
+            "ignore_sections": [
+              "Scan statistics"
+            ]
+          },
+          "mapping": {
+            "fields": {
+              "source_id": {
+                "source": "ID"
+              },
+              "category": {
+                "source": "Title"
+              },
+              "primary_rule_id": {
+                "source": "Rule"
+              },
+              "criticality_raw": {
+                "source": "Severity"
+              },
+              "full_filename": {
+                "source": "File"
+              },
+              "line_number": {
+                "source": "Line",
+                "transform": "int"
+              },
+              "cwe_ids": {
+                "source": "CWE",
+                "transform": "cwe_list"
+              }
+            },
+            "constants": {},
+            "comments_from": []
+          }
+        }
+      ],
+      "field_priority": {},
+      "_comment": "Rôles déclarés : l'Excel fournit l'inventaire et les lignes à compléter, le MD les détails. Aucune priorité de champ validée : les divergences restent à résoudre."
     },
     {
       "label": "ToolC",
       "kind": "md",
       "sheet_name": null,
-      "sources": [{"role": "findings", "kind": "md", "path": "toolc/toolc_report.md", "profile": "table-v1"}]
+      "sources": [
+        {
+          "role": "findings",
+          "kind": "md",
+          "path": "toolc/toolc_report.md",
+          "profile": "table-v1"
+        }
+      ],
+      "_comment": "Aucun mapping déclaré : Paladin propose un profil, à valider une fois (multi-entrées)."
     }
   ]
 }
