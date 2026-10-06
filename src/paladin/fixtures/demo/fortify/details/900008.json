@@ -1,0 +1,12 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": {
+    "id": 900008,
+    "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900008",
+    "brief": "Synthetic description for Weak Cryptographic Hash.",
+    "recommendation": "Synthetic recommendation for Weak Cryptographic Hash.",
+    "functionName": "cache_key",
+    "traceNodes": null,
+    "comments": []
+  }
+}

@@ -1,0 +1,179 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": [
+    {
+      "id": 900001,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900001",
+      "issueName": "SQL Injection",
+      "kingdom": "Input Validation and Representation",
+      "friority": "Critical",
+      "primaryLocation": "orders.py",
+      "lineNumber": 12,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/orders.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0001-4C1A-9E57-0000000000A1",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 89"
+      ]
+    },
+    {
+      "id": 900002,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900002",
+      "issueName": "SQL Injection",
+      "kingdom": "Input Validation and Representation",
+      "friority": "Critical",
+      "primaryLocation": "products.py",
+      "lineNumber": 12,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/products.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0001-4C1A-9E57-0000000000A1",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": true,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 89"
+      ]
+    },
+    {
+      "id": 900003,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900003",
+      "issueName": "SQL Injection",
+      "kingdom": "Input Validation and Representation",
+      "friority": "Critical",
+      "primaryLocation": "products.py",
+      "lineNumber": 17,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/products.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0001-4C1A-9E57-0000000000A1",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 89"
+      ]
+    },
+    {
+      "id": 900004,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900004",
+      "issueName": "Cross-Site Scripting: Reflected",
+      "kingdom": "Input Validation and Representation",
+      "friority": "Critical",
+      "primaryLocation": "search.py",
+      "lineNumber": 7,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/search.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0002-4C1A-9E57-0000000000B2",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 79",
+        "CWE ID 80"
+      ]
+    },
+    {
+      "id": 900005,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900005",
+      "issueName": "Cross-Site Scripting: Reflected",
+      "kingdom": "Input Validation and Representation",
+      "friority": "High",
+      "primaryLocation": "profile.py",
+      "lineNumber": 9,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/profile.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0002-4C1A-9E57-0000000000B2",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 79",
+        "CWE ID 80"
+      ]
+    },
+    {
+      "id": 900006,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900006",
+      "issueName": "Path Manipulation",
+      "kingdom": "Input Validation and Representation",
+      "friority": "High",
+      "primaryLocation": "files.py",
+      "lineNumber": 11,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/files.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0003-4C1A-9E57-0000000000C3",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 22",
+        "CWE ID 73"
+      ]
+    },
+    {
+      "id": 900007,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900007",
+      "issueName": "Password Management: Hardcoded Password",
+      "kingdom": "Security Features",
+      "friority": "High",
+      "primaryLocation": "test_config.py",
+      "lineNumber": 3,
+      "fullFileName": "/build/workspace/shopapp/shop-api/tests/test_config.py",
+      "analyzer": "configuration",
+      "primaryRuleGuid": "C3B9A1E0-0004-4C1A-9E57-0000000000D4",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": true,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 259"
+      ]
+    },
+    {
+      "id": 900008,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900008",
+      "issueName": "Weak Cryptographic Hash",
+      "kingdom": "Security Features",
+      "friority": "Medium",
+      "primaryLocation": "hashing.py",
+      "lineNumber": 7,
+      "fullFileName": "/build/workspace/shopapp/billing-lib/billing/hashing.py",
+      "analyzer": "semantic",
+      "primaryRuleGuid": "C3B9A1E0-0005-4C1A-9E57-0000000000E5",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 328"
+      ]
+    }
+  ],
+  "count": 13,
+  "start": 0,
+  "limit": 8
+}

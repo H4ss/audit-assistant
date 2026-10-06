@@ -1,0 +1,133 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": [
+    {
+      "id": 900009,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900009",
+      "issueName": "Insecure Randomness",
+      "kingdom": "Security Features",
+      "friority": "High",
+      "primaryLocation": "tokens.py",
+      "lineNumber": 8,
+      "fullFileName": "/build/workspace/shopapp/billing-lib/billing/tokens.py",
+      "analyzer": "semantic",
+      "primaryRuleGuid": "C3B9A1E0-0006-4C1A-9E57-0000000000F6",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 338"
+      ]
+    },
+    {
+      "id": 900010,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900010",
+      "issueName": "Log Forging",
+      "kingdom": "Input Validation and Representation",
+      "friority": "Medium",
+      "primaryLocation": "logging_utils.py",
+      "lineNumber": 7,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/logging_utils.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0007-4C1A-9E57-000000000107",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 117"
+      ]
+    },
+    {
+      "id": 900011,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900011",
+      "issueName": "Log Forging",
+      "kingdom": "Input Validation and Representation",
+      "friority": "Medium",
+      "primaryLocation": "logging_utils.py",
+      "lineNumber": 7,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/logging_utils.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0007-4C1A-9E57-000000000107",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 117"
+      ]
+    },
+    {
+      "id": 900012,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900012",
+      "issueName": "Log Forging",
+      "kingdom": "Input Validation and Representation",
+      "friority": "Medium",
+      "primaryLocation": "logging_utils.py",
+      "lineNumber": 11,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/logging_utils.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0007-4C1A-9E57-000000000107",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 117"
+      ]
+    },
+    {
+      "id": 900013,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900013",
+      "issueName": "HTML5: Missing Content Security Policy",
+      "kingdom": "Encapsulation",
+      "friority": "Low",
+      "primaryLocation": "__init__.py",
+      "lineNumber": null,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/__init__.py",
+      "analyzer": "configuration",
+      "primaryRuleGuid": "C3B9A1E0-0008-4C1A-9E57-000000000118",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": []
+    },
+    {
+      "id": 900006,
+      "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900006",
+      "issueName": "Path Manipulation",
+      "kingdom": "Input Validation and Representation",
+      "friority": "High",
+      "primaryLocation": "files.py",
+      "lineNumber": 11,
+      "fullFileName": "/build/workspace/shopapp/shop-api/app/files.py",
+      "analyzer": "dataflow",
+      "primaryRuleGuid": "C3B9A1E0-0003-4C1A-9E57-0000000000C3",
+      "projectVersionId": 10042,
+      "projectName": "ShopApp",
+      "projectVersionName": "release",
+      "engineType": "SCA",
+      "audited": false,
+      "primaryTag": null,
+      "cwe": [
+        "CWE ID 22",
+        "CWE ID 73"
+      ]
+    }
+  ],
+  "count": 13,
+  "start": 8,
+  "limit": 8
+}

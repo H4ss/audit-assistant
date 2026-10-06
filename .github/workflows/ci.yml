@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "palier/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.14"]
+        include:
+          - os: ubuntu-latest
+            python: "3.12"
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Installation depuis un checkout propre (parcours du README)
+        run: |
+          python -m venv .venv
+          if [ "$RUNNER_OS" = "Windows" ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
+          echo "PY=$PY" >> "$GITHUB_ENV"
+          $PY -m pip install --upgrade pip
+          $PY -m pip install -r requirements-dev.lock
+          $PY -m pip install --no-deps -e .
+
+      - name: Tests (fixtures uniquement, aucun jeton métier)
+        run: $PY -m pytest -m "not real"
+
+      - name: Démo et diagnostic
+        env:
+          PALADIN_HOME: ${{ runner.temp }}/paladin home
+        run: |
+          $PY -m paladin demo
+          $PY -m paladin status --home "$PALADIN_HOME-demo"
+          $PY -m paladin doctor --home "$PALADIN_HOME-demo"

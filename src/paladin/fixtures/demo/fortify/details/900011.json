@@ -1,0 +1,25 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": {
+    "id": 900011,
+    "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900011",
+    "brief": "Synthetic description for Log Forging.",
+    "recommendation": "Synthetic recommendation for Log Forging.",
+    "functionName": "audit",
+    "traceNodes": [
+      {
+        "file": "/build/workspace/shopapp/shop-api/app/products.py",
+        "line": 8,
+        "nodeType": "source",
+        "text": "request.args.get"
+      },
+      {
+        "file": "/build/workspace/shopapp/shop-api/app/logging_utils.py",
+        "line": 7,
+        "nodeType": "sink",
+        "text": "audit"
+      }
+    ],
+    "comments": []
+  }
+}

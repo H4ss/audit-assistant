@@ -1,0 +1,31 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": {
+    "id": 900002,
+    "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900002",
+    "brief": "Synthetic description for SQL Injection.",
+    "recommendation": "Synthetic recommendation for SQL Injection.",
+    "functionName": "search_products",
+    "traceNodes": [
+      {
+        "file": "/build/workspace/shopapp/shop-api/app/products.py",
+        "line": 8,
+        "nodeType": "source",
+        "text": "request.args.get"
+      },
+      {
+        "file": "/build/workspace/shopapp/shop-api/app/products.py",
+        "line": 12,
+        "nodeType": "sink",
+        "text": "search_products"
+      }
+    ],
+    "comments": [
+      {
+        "comment": "Audit 2025-11 : requête paramétrée a priori, à confirmer.",
+        "username": "auditor-a",
+        "seqNumber": 1
+      }
+    ]
+  }
+}

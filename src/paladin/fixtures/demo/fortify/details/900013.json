@@ -1,0 +1,12 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": {
+    "id": 900013,
+    "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900013",
+    "brief": "Synthetic description for HTML5: Missing Content Security Policy.",
+    "recommendation": "Synthetic recommendation for HTML5: Missing Content Security Policy.",
+    "functionName": null,
+    "traceNodes": null,
+    "comments": []
+  }
+}

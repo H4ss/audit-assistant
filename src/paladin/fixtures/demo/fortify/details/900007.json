@@ -1,0 +1,18 @@
+{
+  "_synthetic": "Capture fictive Paladin. Forme inspirée d'une API SSC, NON vérifiée sur une instance réelle.",
+  "data": {
+    "id": 900007,
+    "issueInstanceId": "FFFFFFFFFFFFFFFFFFFFFFFF00900007",
+    "brief": "Synthetic description for Password Management: Hardcoded Password.",
+    "recommendation": "Synthetic recommendation for Password Management: Hardcoded Password.",
+    "functionName": null,
+    "traceNodes": null,
+    "comments": [
+      {
+        "comment": "Fichier de test ; vérifier le packaging.",
+        "username": "auditor-a",
+        "seqNumber": 1
+      }
+    ]
+  }
+}
