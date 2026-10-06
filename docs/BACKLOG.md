@@ -3,38 +3,33 @@
 États : `todo` · `doing` · `done` · `blocked` (avec motif). Propriétaire : coordinateur (construction séquentielle).
 Un palier se termine par un check avec l'utilisateur, puis un merge sur `main`, un tag `v0.N.0` et un push.
 
-## P0 — Socle et contrats — `done` (en attente de check)
+## P0 — Socle et contrats — `done` (v0.0.1)
+
+Contrats, schéma SQLite et migrations, espace hors dépôt, fixtures, CLI, CI Windows/Linux (verte).
+
+## P1 — Imports multi-entrées et Excel — `done` (en attente de check)
 
 | ID | Tâche | État | Recette |
 |---|---|---|---|
-| P0-1 | `pyproject`, `requirements.lock` (wheels Windows vérifiés), `.gitignore` données/secrets | done | install propre |
-| P0-2 | Contrats : verdicts, valeurs Excel exactes, discussion, états, colonnes §21.1, `AgentProposal`, `SheetSchemaProposal` | done | `tests/test_contracts.py` |
-| P0-3 | Schéma SQLite complet (§7, §22.6) + migrations, sauvegarde avant mise à jour, migration immuable | done | `tests/test_db.py` |
-| P0-4 | Espace de travail hors dépôt, jetons agent/humain distincts, refus d'un dossier dans le dépôt | done | `tests/test_cli.py` |
-| P0-5 | Fixtures : 2 dépôts fictifs, Fortify paginé (`release`, `dev`, absente, ambiguë, doublon), ToolB Excel+MD, ToolC MD (injection, ligne mal formée), classeur généré | done | `tests/test_fixtures.py` |
-| P0-6 | CLI `init`/`demo`/`serve`/`doctor`/`status`, port occupé, boucle locale | done | `tests/test_cli.py` |
-| P0-7 | CI GitHub Actions Windows/Linux | done | premier run après push |
-
-## P1 — Imports et Excel — `todo`
-
-| ID | Tâche | Dépend | Recette |
-|---|---|---|---|
-| P1-1 | Importeur Fortify sur fixtures : sélection stricte `release` (absente/ambiguë = blocage), pagination, doublons, totaux, manifeste + réponses brutes horodatées, reprise après page échouée | P0 | §15 : multi-pages, jeton expiré, release absente |
-| P1-2 | Importeur MD par profil déclaré (`heading-kv-v1`, `table-v1`), offsets/sections, sections non reconnues, import partiel signalé | P0 | §15 : MD partiellement reconnu |
-| P1-3 | Lecteur Excel par mapping d'onglet (en-têtes réels ↔ clés), clés stables, collisions bloquantes ligne par ligne | P0 | — |
-| P1-4 | Rapprochement intra-outil Excel+MD : 3 compteurs, divergences conservées avec provenance par champ | P1-2, P1-3 | §15 : concurrent en désaccord |
-| P1-5 | Identité : id source contextualisé, empreinte documentée, collisions exposées, réimport idempotent | P1-1..4 | §15 : réimporter deux fois |
-| P1-6 | Export atomique : colonnes autorisées, texte non-formule, préservation formules/hors périmètre, sauvegarde, réouverture-vérification, manifeste, fichier verrouillé, conflit de modification externe | P1-3 | §15 : XLSX qualifié, classeur réordonné, Excel verrouillé |
-| P1-7 | `paladin import` + démo importée | P1-1..5 | démo peuplée |
+| P1-1 | Fortify sur fixtures : `release` stricte (absente/ambiguë = blocage), pagination, doublons, totaux, manifeste + réponses brutes, reprise, jeton expiré | done | `test_importers.py` (Fortify) |
+| P1-2 | MD par profil (`heading-kv-v1`, `table-v1`), offsets, sections non reconnues → partiel | done | `test_importers.py` (Markdown) |
+| P1-3 | Lecteurs génériques Excel (fichier ou onglet, détection de l'en-tête) et CSV ; SARIF 2.1.0 | done | idem |
+| P1-4 | **Multi-entrées** : inférence de mapping (noms FR/EN + valeurs), profils proposés → validés → réutilisés ; colonnes cibles jamais prises pour des sources | done | `test_french_csv_mapping_inference`, CLI `inspect` |
+| P1-5 | Classification interne (famille, base, route d'analyse, checklist) | done | `test_classification_basis_is_traceable` |
+| P1-6 | Rapprochement Excel+MD : 3 compteurs, divergences conservées avec provenance par champ | done | `test_excel_md_counters_and_divergence` |
+| P1-7 | Identité : id contextualisé, empreinte documentée, collisions exposées, réimport idempotent, réexamen si la source change | done | idem |
+| P1-8 | Noyau des décisions (avancé depuis P2) : journal append-only, révisions, annulation, brouillons | done | `test_decisions.py` |
+| P1-9 | Export : colonnes autorisées, texte non-formule, valeurs humaines protégées, clé à chaque export, qualification du classeur, verrou, vérification par réouverture, sauvegarde, remplacement atomique, manifeste, périmé | done | `test_export.py` |
+| P1-10 | CLI `import`, `inspect`, `profile`, `export` ; démo importée | done | `test_cli.py` |
 
 ## P2 — Revue — `todo`
-Carte de revue, Accepter/Corriger/À investiguer/Passer/Annuler, raccourcis, brouillons, révisions, file stable, reprise, décision enregistrée vs Excel à jour, propositions simulées de démo.
+(Le noyau des décisions est déjà livré en P1.) Carte de revue, Accepter/Corriger/À investiguer/Passer/Annuler, raccourcis, brouillons, révisions, file stable, reprise, décision enregistrée vs Excel à jour, propositions simulées de démo.
 
 ## P3 — Agent OpenCode réel — `todo`
 Jobs avec bail, API agent (jeton agent, sans validation), outils OpenCode, agent + skill, validation JSON/références, traçage modèle. **Estimation du coût OpenRouter/GLM présentée avant tout appel réel.**
 
 ## P4 — Nouvel outil et diagnostic — `todo`
-`SheetSchemaProposal` (agent ou manuel), aperçu, validation, création idempotente d'onglet, évolution versionnée ; `doctor` Fortify complet (matrice des champs, filtres, totaux) et rapport sans secrets.
+Validation des profils d'entrée dans l'interface ; proposition de mapping par l'agent pour les formats que l'heuristique ne couvre pas. `SheetSchemaProposal` (agent ou manuel), aperçu, validation, création idempotente d'onglet, évolution versionnée ; `doctor` Fortify complet (matrice des champs, filtres, totaux) et rapport sans secrets.
 
 ## P5 — Rapprochement inter-outils — `todo`
 `ComparisonRun`, candidats bornés, vue côte à côte, liens (types/états), projections `Found in` / `criticality in`, invalidations.
