@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}File — {{ campaign.name }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <form class="row filters" method="get">
+    <div class="tabs">
+      {% for key, label in VIEWS.items() %}
+      <a class="tab {{ 'active' if key == view }}" href="?view={{ key }}&tool={{ tool }}&search={{ search }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <input type="hidden" name="view" value="{{ view }}">
+    <select name="tool" onchange="this.form.submit()">
+      <option value="">Tous les outils</option>
+      {% for t in tools %}<option {{ 'selected' if t == tool }}>{{ t }}</option>{% endfor %}
+    </select>
+    <input type="search" name="search" value="{{ search }}" placeholder="ID, catégorie, chemin, règle">
+    <button class="btn">Filtrer</button>
+    {% if rows %}<a class="btn primary" href="/c/{{ campaign.id }}/f/{{ rows[0].id }}?view={{ view }}&tool={{ tool }}">Revoir cette vue ({{ rows|length }})</a>{% endif %}
+  </form>
+  <table class="table queue">
+    <thead><tr><th>Outil</th><th>ID</th><th>Catégorie</th><th>Emplacement</th><th>Criticité (source)</th><th>Proposition</th><th>Revue</th><th>Excel</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.tool_label }}</td>
+        <td><a href="/c/{{ campaign.id }}/f/{{ r.id }}?view={{ view }}&tool={{ tool }}"><code>{{ r.source_id[-12:] if r.source_id|length > 16 else r.source_id }}</code></a></td>
+        <td>{{ r.category or '—' }}</td>
+        <td><code>{{ r.normalized_path or '—' }}{% if r.line_number %}:{{ r.line_number }}{% endif %}</code></td>
+        <td>{{ r.criticality_raw or '—' }}</td>
+        <td>{% if r.proposed_verdict %}<span class="badge v-{{ r.proposed_verdict|lower }}">{{ VERDICT_LABELS[r.proposed_verdict] }}</span>{% else %}<span class="muted">aucune</span>{% endif %}</td>
+        <td>{{ REVIEW_LABELS[r.review_state] }}{% if r.discussion_required %} <span class="badge disc" title="Point à discuter">discussion</span>{% endif %}</td>
+        <td class="small">{{ EXPORT_LABELS[r.export_state] if r.current_decision_id else '' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="muted">Rien dans cette vue.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

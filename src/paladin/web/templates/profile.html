@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Profil {{ prof.name }} — Paladin{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Nouvelle source : {{ prof.name }}</h1>
+  <p>Paladin a détecté les champs de cette source ({{ prof.source_kind }}) et propose de les relier aux informations qu'il utilise.
+     Vérifier, corriger si besoin, puis valider <strong>une seule fois</strong> : le profil sera réutilisé pour toute source de même structure.</p>
+  <p class="muted small">Statut : {{ prof.status }} · proposé par {{ prof.proposed_by }} · v{{ prof.version }}</p>
+  <form method="post" action="/c/{{ campaign.id }}/profiles/{{ prof.id }}/validate">
+    <input type="hidden" name="token" value="{{ token }}">
+    <table class="table">
+      <thead><tr><th>Information Paladin</th><th>Champ de la source</th><th>Transformation</th></tr></thead>
+      <tbody>
+      {% for key in keys %}
+        {% set spec = prof.mapping.fields.get(key) %}
+        <tr class="{{ '' if spec else 'muted' }}">
+          <td><code>{{ key }}</code></td>
+          <td><select name="src_{{ key }}">
+            <option value="">— non utilisé —</option>
+            {% for fld in source_fields %}<option value="{{ fld }}" {{ 'selected' if spec and spec.source == fld }}>{{ fld }}</option>{% endfor %}
+          </select></td>
+          <td><select name="tr_{{ key }}">{% for t in transforms %}<option {{ 'selected' if (spec and spec.transform == t) or (not spec and t == 'text') }}>{{ t }}</option>{% endfor %}</select></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <input type="hidden" name="comments_from" value="{{ prof.mapping.comments_from|join('|') }}">
+    {% if prof.mapping.comments_from %}<p class="small">Commentaires source repris depuis : {{ prof.mapping.comments_from|join(', ') }}</p>{% endif %}
+    <p class="small muted">Transformations : <code>location_path</code> / <code>location_line</code> découpent « chemin:ligne » ; <code>cwe_list</code> normalise les CWE ; <code>int</code> pour les numéros de ligne.</p>
+    <button class="btn primary">Valider ce profil</button>
+    <a class="btn" href="/c/{{ campaign.id }}">Plus tard</a>
+  </form>
+</section>
+{% endblock %}
