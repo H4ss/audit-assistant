@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from paladin import __version__, store
+from paladin.agent import jobs as agent_jobs
 from paladin.analysis import safe_repo_file
 from paladin.config import Settings
 from paladin.contracts import (
@@ -97,6 +98,10 @@ def create_app(settings: Settings) -> FastAPI:
         DISCUSSION_COMMENT=DISCUSSION_COMMENT,
     )
     app.mount("/static", StaticFiles(directory=str(_HERE / "static")), name="static")
+    from paladin.agent.api import build_router
+    from paladin.agent.workspace import skill_version
+
+    app.include_router(build_router(conn, settings.agent_token(), skill_version()))
 
     @app.middleware("http")
     async def local_only(request: Request, call_next):
@@ -177,6 +182,7 @@ def create_app(settings: Settings) -> FastAPI:
             last_decided=q.last_decided(conn, cid),
             flash=_pop_flash(conn, cid),
             home=str(settings.home),
+            agent=agent_jobs.status(conn, cid),
         )
 
     @app.get("/c/{cid}/queue", response_class=HTMLResponse)
@@ -336,6 +342,28 @@ def create_app(settings: Settings) -> FastAPI:
         verdict = body.get("verdict") if body.get("verdict") in ("TRUE_POSITIVE", "NOT_AN_ISSUE") else None
         dec.save_draft(conn, fid, verdict, (body.get("comment") or "")[:4000])
         return JSONResponse({"saved": True})
+
+    @app.post("/c/{cid}/agent/enqueue")
+    async def agent_enqueue(request: Request, cid: str):
+        await _form(request)
+        n = agent_jobs.enqueue_analysis(conn, cid)
+        _flash(conn, cid, f"{n} finding(s) mis en file pour l'agent." if n else "Aucun finding à mettre en file.", "ok")
+        return RedirectResponse(f"/c/{cid}", status_code=303)
+
+    @app.get("/api/c/{cid}/f/{fid}/status")
+    def finding_status(cid: str, fid: str):
+        row = conn.execute(
+            "SELECT f.revision, f.processing_state, (SELECT MAX(seq) FROM analysis a WHERE a.finding_id = f.id) AS seq"
+            " FROM finding f WHERE f.id = ? AND f.campaign_id = ?",
+            (fid, cid),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Finding inconnu")
+        return {
+            "revision": row["revision"],
+            "processing_state": row["processing_state"],
+            "analysis_seq": row["seq"] or 0,
+        }
 
     @app.post("/c/{cid}/import")
     async def run_import(request: Request, cid: str):

@@ -72,6 +72,20 @@
 </div>
 
 <section class="panel">
+  <h2>3. Agent d'analyse (OpenCode)</h2>
+  <p>
+    <span class="badge {{ 'ok' if agent.label in ('agent connecté', 'analyse en cours') else ('warn' if agent.label == "attente d'agent" else '') }}">{{ agent.label }}</span>
+    <span class="muted small">{{ agent.pending }} en attente · {{ agent.claimed }} en cours · {{ agent.done }} analysés · {{ agent.error }} en erreur{% if agent.cost_usd %} · coût mesuré {{ '%.3f'|format(agent.cost_usd) }} ${% endif %}</span>
+  </p>
+  <p class="muted small">L'agent propose ; vous décidez. Les propositions arrivent dans la file « Proposition prête » sans changer la fiche que vous lisez.</p>
+  <form method="post" action="/c/{{ campaign.id }}/agent/enqueue" class="row wrap">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button class="btn">Mettre en file les findings sans proposition</button>
+    <span class="small">puis lancer l'agent : <code>Paladin.cmd agent run --max-jobs 5</code> (Linux : <code>./paladin.sh agent run --max-jobs 5</code>)</span>
+  </form>
+</section>
+
+<section class="panel">
   <h2>Dernière décision</h2>
   {% if last_decided %}
   <form method="post" action="/c/{{ campaign.id }}/undo" class="row">

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import os
 import socket
 import sys
 from pathlib import Path
@@ -145,7 +146,15 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
     print("Arrêter : Ctrl+C dans cette fenêtre.")
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    from paladin.agent.runner import server_file
+
+    marker = server_file(settings)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps({"url": url.rstrip("/"), "pid": os.getpid()}), encoding="utf-8")
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="warning")
+    finally:
+        marker.unlink(missing_ok=True)
     return 0
 
 
@@ -188,6 +197,58 @@ def cmd_campaign(args: argparse.Namespace) -> int:
     print(f"Campagne « {cid} » créée dans {home}.")
     print("Suite : python -m paladin start   (puis « Importer » dans l'interface)")
     return 0
+
+
+def cmd_agent(args: argparse.Namespace) -> int:
+    """Agent OpenCode : préparer l'espace, mettre en file, exécuter, état."""
+    from paladin.agent import jobs, workspace
+
+    settings, conn = _open(args)
+    try:
+        if args.action == "setup":
+            files = workspace.setup(settings, args.model)
+            print(f"Espace OpenCode de Paladin : {workspace.workspace_dir(settings)}")
+            print("Votre configuration OpenCode globale n'est pas modifiée.")
+            for f in files:
+                print(f"  {f.action:10} {f.path}")
+            print(f"Version des instructions : {workspace.skill_version()}")
+            print("Usage interactif : ouvrir OpenCode dans ce dossier, choisir l'agent « paladin-analyst ».")
+            return 0
+        if args.action == "enqueue":
+            print(f"{jobs.enqueue_analysis(conn, args.campaign)} finding(s) mis en file.")
+            return 0
+        if args.action == "status":
+            st = jobs.status(conn, args.campaign)
+            print(
+                f"{st['label']} — en attente {st['pending']}, en cours {st['claimed']}, analysés {st['done']},"
+                f" erreurs {st['error']}, coût mesuré {st['cost_usd']:.4f} $"
+            )
+            return 0
+        from paladin.agent.runner import AgentRunError, run_agent
+
+        if args.enqueue:
+            print(f"{jobs.enqueue_analysis(conn, args.campaign)} finding(s) mis en file.")
+        budget = args.budget if args.budget is not None else float(settings.agent.get("budget_usd", 1.5))
+        try:
+            report = run_agent(
+                settings,
+                conn,
+                args.campaign,
+                max_jobs=args.max_jobs,
+                budget_usd=budget,
+                model=args.model,
+                job_timeout=args.timeout,
+            )
+        except AgentRunError as exc:
+            print(f"Agent non lancé : {exc}\n→ {exc.action}")
+            return 2
+        done = sum(1 for o in report.outcomes if o.status == "proposition reçue")
+        print(f"\nTerminé : {done} proposition(s) reçue(s) sur {len(report.outcomes)} job(s).")
+        print(f"Dépense mesurée : {report.spent_usd:.4f} $ (source : {report.cost_source}), plafond {budget:.2f} $.")
+        print(f"Arrêt : {report.stopped}")
+        return 0
+    finally:
+        conn.close()
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -435,6 +496,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sheet")
     p.add_argument("--profile", help="Profil MD (heading-kv-v1, table-v1).")
     p.set_defaults(func=cmd_inspect)
+    p = add("agent", "Agent OpenCode : setup, enqueue, run, status.")
+    p.add_argument("action", choices=["setup", "enqueue", "run", "status"])
+    p.add_argument("--campaign", default="demo")
+    p.add_argument("--model", help="fournisseur/modèle, ex. openrouter/z-ai/glm-5.3")
+    p.add_argument("--max-jobs", type=int, default=3)
+    p.add_argument("--budget", type=float, help="Plafond de dépense en USD pour cette exécution (défaut : 1.5).")
+    p.add_argument("--timeout", type=int, default=900, help="Secondes maximum par job.")
+    p.add_argument(
+        "--enqueue", action="store_true", help="Mettre en file les findings sans proposition avant de lancer."
+    )
+    p.set_defaults(func=cmd_agent)
     p = add("profile", "Profils d'entrée : lister, afficher, valider.")
     p.add_argument("action", choices=["list", "show", "validate"])
     p.add_argument("profile_id", nargs="?")

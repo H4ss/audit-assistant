@@ -61,8 +61,8 @@ port = {port}
 [agent]
 # Client d'analyse : OpenCode. Le modèle est une configuration, pas une dépendance.
 client = "opencode"
-model_requested = "glm-latest"
-provider = ""            # ex. "openrouter" ; renseigné par `paladin doctor`
+model = "openrouter/z-ai/glm-5.3"   # fournisseur/modèle ; version épinglée (l'alias glm-latest masque la version)
+budget_usd = 1.5         # plafond par exécution de `paladin agent run`
 lease_seconds = 900
 
 [fortify]
