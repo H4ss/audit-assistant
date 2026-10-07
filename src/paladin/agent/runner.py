@@ -356,6 +356,7 @@ class ProbeResult:
     forbidden: list[str]
     cost_usd: float | None
     log: Path
+    model_text: str = ""
 
 
 def probe_agent(settings: Settings, model: str | None = None, opencode_cmd: list[str] | None = None) -> ProbeResult:
@@ -392,6 +393,7 @@ def probe_agent(settings: Settings, model: str | None = None, opencode_cmd: list
     log.write_text(proc.stdout + "\n" + proc.stderr, encoding="utf-8")
     used: list[str] = []
     forbidden: list[str] = []
+    texts: list[str] = []
     for line in proc.stdout.splitlines():
         if not line.startswith("{"):
             continue
@@ -399,6 +401,8 @@ def probe_agent(settings: Settings, model: str | None = None, opencode_cmd: list
             part = json.loads(line).get("part") or {}
         except json.JSONDecodeError:
             continue
+        if part.get("type") == "text":
+            texts.append(str(part.get("text", "")))
         if part.get("type") != "tool":
             continue
         name = str(part.get("tool"))
@@ -407,4 +411,4 @@ def probe_agent(settings: Settings, model: str | None = None, opencode_cmd: list
         if status == "completed" and not (name.startswith("paladin_") or name in ALLOWED_AGENT_TOOLS):
             forbidden.append(name)
     cost = parse_opencode_output(proc.stdout)["cost_usd"]
-    return ProbeResult(not forbidden and proc.returncode == 0, used, forbidden, cost, log)
+    return ProbeResult(not forbidden and proc.returncode == 0, used, forbidden, cost, log, " ".join(texts).strip())

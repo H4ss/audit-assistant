@@ -223,6 +223,9 @@ def cmd_agent(args: argparse.Namespace) -> int:
                 print(f"Sondage impossible : {exc}\n→ {exc.action}")
                 return 2
             print(f"Outils appelés par l'agent : {res.tools_used or 'aucun'}")
+            print(f"Réponse du modèle : {res.model_text[:400] or '(aucune)'}")
+            print("Ce sondage montre qu'aucun outil interdit n'a été exécuté ; il complète, sans le remplacer,")
+            print("le contrôle de configuration (agent restreint à paladin_*, Code Mode désactivé).")
             if res.ok:
                 print("OK : aucun outil hors paladin_* n'a été exécuté (shell, fichiers, réseau, execute).")
             else:
