@@ -63,7 +63,7 @@ def test_default_columns_match_contract():
         "Line number",
         "Full filename",
         "Criticality",
-        "Commentaires",
+        "Comments",
         "Analyzer",
         "Primary rule ID",
         "Instance ID",

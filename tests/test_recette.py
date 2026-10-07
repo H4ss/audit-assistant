@@ -103,7 +103,7 @@ def test_slice_acceptance_end_to_end(settings, conn):
     assert fort[F + "900003"]["analysis result"] is None  # correction annulée : rien n'est écrit
     assert (fort[F + "900001"]["Found in ToolB"], fort[F + "900001"]["criticality in ToolB"]) == ("Yes", "High")
     assert _rows(path, "ToolB", "Finding ID")["TB-0001"]["criticality in Fortify"] == "Critical"
-    assert len(_rows(path, "ToolC", "ID ToolC")) == 5
+    assert len(_rows(path, "ToolC", "Finding ID")) == 5
     wb = load_workbook(path)
     assert wb["Synthèse"]["B3"].value == '=COUNTIF(Fortify!N:N,"True Positive")'
     assert wb["ToolB"]["I4"].value == "voir avec l'équipe front" and wb["ToolB"]["N2"].value.startswith("=IF(")

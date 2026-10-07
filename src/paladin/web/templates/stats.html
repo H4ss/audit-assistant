@@ -5,7 +5,7 @@
   <h1>Mesures du pilote</h1>
   <p class="muted">Effectifs, pas de score. Les propositions simulées de la démo sont comptées à part.</p>
   <div class="grid">
-    <div class="tile"><strong>{{ m.decided }}</strong> décision(s) finales <span class="small muted">{{ m.decided_individual }} individuelle(s), {{ m.decided_batch }} par lot · TP {{ m.decided_tp }} / Not an issue {{ m.decided_nai }}</span></div>
+    <div class="tile"><strong>{{ m.decided }}</strong> décision(s) finales <span class="small muted">{{ m.decided_individual }} individuelle(s), {{ m.decided_batch }} par lot, {{ m.decided_import }} reprise(s) d'Excel · TP {{ m.decided_tp }} / Not an issue {{ m.decided_nai }}</span></div>
     <div class="tile"><strong>{{ m.investigating }}</strong> à investiguer</div>
     <div class="tile"><strong>{{ m.proposals }}</strong> proposition(s) <span class="small muted">dont {{ m.proposals_simulated }} simulée(s) · {{ m.abstentions }} indéterminée(s)</span></div>
     <div class="tile"><strong>{{ m.decisions_per_hour if m.decisions_per_hour is not none else '—' }}</strong> décisions / heure active <span class="small muted">{{ m.active_hours }} h actives (écarts &lt; 15 min)</span></div>

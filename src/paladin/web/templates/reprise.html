@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Reprise du classeur — {{ campaign.name }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Reprendre les décisions déjà saisies</h1>
+  <p>Classeur : <code>{{ plan.workbook }}</code></p>
+  <p class="muted">Chaque verdict déjà présent devient une décision Paladin marquée « reprise Excel » (texte exact conservé). Rien n'est écrasé : une décision Paladin différente reste en place et la ligne est listée en conflit. Les valeurs non standard sont normalisées et réécrites au prochain export. Annulable en bloc.</p>
+  <div class="grid">
+    {% for st, label in [('importable', 'à reprendre'), ('normalisé', 'à reprendre (normalisées)'), ('identique', 'déjà identiques'), ('conflit', 'conflits'), ('commentaire seul', 'commentaire sans verdict'), ('non reconnu', 'valeurs non reconnues'), ('sans finding', 'lignes sans finding')] %}
+    <div class="tile"><strong>{{ statuses.get(st, [])|length }}</strong> {{ label }}</div>
+    {% endfor %}
+  </div>
+  {% if plan.importable %}
+  <form method="post" action="/c/{{ campaign.id }}/reprise" class="row" style="margin-top:1rem">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button class="btn primary" data-confirm="Reprendre {{ plan.importable|length }} décision(s) depuis ce classeur ?">Reprendre {{ plan.importable|length }} décision(s)</button>
+  </form>
+  {% else %}<p class="callout">Rien à reprendre.</p>{% endif %}
+</section>
+<section class="panel">
+  <h2>Détail</h2>
+  <table class="table small">
+    <thead><tr><th>Onglet / ligne</th><th>Clé</th><th>analysis result</th><th>Comment</th><th>Statut</th><th>Détail</th></tr></thead>
+    {% for it in plan.items %}
+    <tr><td>{{ it.sheet }} / {{ it.row }}</td><td><code>{{ it.key }}</code></td><td>{{ it.raw_result if it.raw_result is not none else '' }}</td>
+      <td>{{ it.comment or '' }}</td>
+      <td><span class="badge {{ 'ok' if it.status in ('importable', 'normalisé') else ('warn' if it.status in ('conflit', 'non reconnu') else '') }}">{{ it.status }}</span></td>
+      <td>{{ it.detail }}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">Aucune valeur analyste dans le classeur.</td></tr>{% endfor %}
+  </table>
+</section>
+{% endblock %}

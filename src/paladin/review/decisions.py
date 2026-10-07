@@ -30,7 +30,13 @@ from paladin.contracts import (
 from paladin.store import ConflictError, NotFoundError
 from paladin.util import new_id, utcnow
 
-EFFECTIVE_ACTIONS = {DecisionAction.ACCEPT, DecisionAction.CORRECT, DecisionAction.INVESTIGATE, DecisionAction.BATCH}
+EFFECTIVE_ACTIONS = {
+    DecisionAction.ACCEPT,
+    DecisionAction.CORRECT,
+    DecisionAction.INVESTIGATE,
+    DecisionAction.BATCH,
+    DecisionAction.IMPORT,
+}
 
 
 class DecisionError(ValueError):
@@ -143,7 +149,7 @@ def record_decision(
     if action == DecisionAction.UNDO:
         raise DecisionError("Utiliser undo_last pour annuler.")
     verdict_v = Verdict(verdict) if verdict else None
-    if action in (DecisionAction.ACCEPT, DecisionAction.CORRECT, DecisionAction.BATCH):
+    if action in (DecisionAction.ACCEPT, DecisionAction.CORRECT, DecisionAction.BATCH, DecisionAction.IMPORT):
         if verdict_v not in FINAL_VERDICTS:
             raise DecisionError("Une décision finale exige True Positive ou Not an issue. Sinon : « À investiguer ».")
     elif action == DecisionAction.INVESTIGATE:
@@ -155,6 +161,8 @@ def record_decision(
         raise DecisionError("Une décision de lot porte l'autorité et l'identifiant du lot.")
     if authority == Authority.BATCH and action != DecisionAction.BATCH:
         raise DecisionError("L'autorité de lot est réservée aux décisions de lot.")
+    if (action == DecisionAction.IMPORT) != (authority == Authority.IMPORT):
+        raise DecisionError("Une reprise d'Excel porte l'action et l'autorité « import », et elles seules.")
     if comment is not None:
         comment = comment if comment.strip() else None
     if discussion_required is None:

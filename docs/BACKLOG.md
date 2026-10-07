@@ -45,7 +45,7 @@ Jobs à bail, API agent, plugin OpenCode V2, runner avec budget mesuré, sondage
 | P5-7 | Export des colonnes comparatives (valeurs humaines protégées, manifeste avec liens, périmé après annulation), ajout explicite des colonnes manquantes | done | `test_export_writes_comparative…`, `test_human_value…`, `test_missing_comparative…` |
 | P5-8 | Interface : page « Rapprochement », vue côte à côte avec raccourcis, page « Nouvel onglet » | done | `test_web_match.py` |
 
-## P6 — Mémoire, règles, lots — `done` (en attente de check)
+## P6 — Mémoire, règles, lots — `done` (v0.6.0)
 
 | ID | Tâche | État | Recette |
 |---|---|---|---|
@@ -57,6 +57,18 @@ Jobs à bail, API agent, plugin OpenCode V2, runner avec budget mesuré, sondage
 | P6-6 | Mauvais commit : alerte sur la fiche et exclusion des lots | done | `test_wrong_commit…` |
 | P6-7 | Mesures du pilote (section 17) avec effectifs | done | `test_pilot_metrics…` |
 | P6-8 | Recette finale de la tranche (section 24.5) et `docs/RECETTE.md` | done | `test_slice_acceptance_end_to_end` |
+
+## P7 — Retours de revue — `done` (en attente de check)
+
+| ID | Tâche | État | Recette |
+|---|---|---|---|
+| P7-1 | Reprise d'un classeur déjà renseigné : aperçu classé, décisions « reprise Excel » traçables, normalisation, conflits conservés, annulation qui rend les cellules à l'humain | done | `test_reprise.py` |
+| P7-2 | Changer le classeur cible d'une campagne (interface et CLI) | done | `test_change_target…` |
+| P7-3 | Export entièrement en anglais (`Comments`, `Finding ID`), ancien `Commentaires` reconnu | done | `test_default_columns…`, `test_legacy_commentaires…` |
+| P7-4 | Certificat : contexte TLS vérifiant (appel déprécié corrigé), message de conversion pour un fichier illisible ; procédure documentée | done | `test_ca_bundle…` |
+| P7-5 | README : `/connect` (OpenCode) et choix du modèle (Paladin) clarifiés | done | — |
+
+À discuter : profils d'instance SSC (dev/prod) ; lecture directe du magasin de certificats Windows.
 
 ## Hors de portée de ce poste (Étapes B/C)
 - Diagnostic Fortify sur l'instance réelle (endpoints, champs, `release`) — PC de travail.

@@ -200,3 +200,23 @@ def test_readiness_reflects_real_state(demo_ssc, conn):
     assert items["Modèle connecté et testé"].status == readiness.TODO  # testé, mais pas le modèle configuré
     data = json.loads((demo_ssc.home / "run" / "status.json").read_text(encoding="utf-8"))
     assert set(data) == {"fortify_check", "agent_smoke"}
+
+
+def test_ca_bundle_builds_a_verifying_context_or_explains(settings, tmp_path):
+    import ssl
+
+    settings.fortify.update({"url": "https://ssc.corp/ssc", "ca_bundle": str(tmp_path / "absent.pem")})
+    ssc.save_token(settings, "tok")
+    with pytest.raises(fty.FortifyError) as exc:
+        ssc.make_client(settings)
+    assert "certutil -encode" in exc.value.action
+    der = tmp_path / "ac.cer"
+    der.write_bytes(b"\x30\x82\x01\x0a binaire")
+    settings.fortify["ca_bundle"] = str(der)
+    with pytest.raises(fty.FortifyError):
+        ssc.make_client(settings)
+    import certifi
+
+    settings.fortify["ca_bundle"] = certifi.where()  # un vrai PEM
+    client = ssc.make_client(settings)
+    assert isinstance(client.verify, ssl.SSLContext) and client.verify.verify_mode == ssl.CERT_REQUIRED

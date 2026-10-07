@@ -56,7 +56,7 @@
   <table class="table">
     {% for b in history %}
     <tr class="{{ 'muted' if b.undone_at }}"><td>{{ b.created_at[:16].replace('T', ' ') }}</td><td>lot {{ b.id[:8] }}</td>
-      <td>{{ b.members|length }} membre(s) · {{ VERDICT_LABELS[b.verdict] }}{% if b.comment %} · « {{ b.comment }} »{% endif %}{% if b.rule_id %} · règle v{{ b.rule_version }}{% endif %}</td>
+      <td>{{ b.members|length }} membre(s) · {{ "reprise d'un classeur" if b.verdict == 'REPRISE' else VERDICT_LABELS.get(b.verdict, b.verdict) }}{% if b.comment %} · « {{ b.comment }} »{% endif %}{% if b.rule_id %} · règle v{{ b.rule_version }}{% endif %}</td>
       <td>{% if b.undone_at %}annulé{% if b.undo_report %} ({% for k, v in b.undo_report.items() %}{{ k }} : {{ v|length }} {% endfor %}){% endif %}{% else %}<form method="post" action="/c/{{ campaign.id }}/batches/{{ b.id }}/undo" class="inline"><input type="hidden" name="token" value="{{ token }}"><button class="btn small" data-confirm="Annuler ce lot ? Les membres modifiés depuis ne seront pas touchés.">Annuler le lot</button></form>{% endif %}</td></tr>
     {% else %}<tr><td class="muted">Aucun lot.</td></tr>{% endfor %}
   </table>
