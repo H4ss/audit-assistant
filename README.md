@@ -9,7 +9,7 @@ Le modèle propose, vous décidez. Rien ne part dans l'Excel sans votre validati
 Il faut **Git** et **Python 3.14** (3.12 ou plus fonctionne aussi).
 
 ```bash
-git clone https://github.com/H4ss/audit-assitant.git paladin
+git clone https://github.com/H4ss/audit-assistant.git paladin
 ```
 
 Ensuite :

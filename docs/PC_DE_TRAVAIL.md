@@ -20,7 +20,7 @@ Tout se fait depuis l'interface. La page **« Prêt pour le travail ? »** (lien
 ## Étape 1 — Installer
 
 ```bat
-git clone https://github.com/H4ss/audit-assitant.git paladin
+git clone https://github.com/H4ss/audit-assistant.git paladin
 ```
 
 Double-cliquer ensuite sur `paladin\Paladin.cmd`. La première fois, l'installation prend 1 à 2 minutes, puis le navigateur s'ouvre.
