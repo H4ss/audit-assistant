@@ -33,8 +33,9 @@ from paladin.config import Settings
 from paladin.contracts import (
     DEFAULT_COLUMNS,
     ExportState,
-    format_cwe_ids,
 )
+from paladin.excel.sheets import current_schema, finding_value
+from paladin.matching import Projection, projection
 from paladin.review.decisions import excel_projection
 from paladin.util import dumps, file_stamp, loads, new_id, sha256_file, utcnow
 
@@ -70,6 +71,8 @@ class SheetPlan:
     mode: str  # complete_existing | generate_rows
     key_header: str
     key_field: str  # attribut du finding servant de clé (source_id)
+    schema_columns: list[dict[str, Any]] | None = None  # schéma validé (onglet créé par Paladin)
+    extra_headers: list[str] = field(default_factory=list)  # colonnes comparatives ajoutées sur validation
 
 
 @dataclass
@@ -80,9 +83,10 @@ class CellWrite:
     column_key: str
     old: Any
     new: Any
-    finding_id: str
+    finding_id: str | None
     decision_event_id: str | None
     text: bool
+    relation_ids: list[str] | None = None
 
     @property
     def ref(self) -> str:
@@ -115,6 +119,24 @@ def sheet_plans(conn: sqlite3.Connection, campaign: dict[str, Any]) -> tuple[lis
             without_sheet.append(spec["label"])
             continue
         sheet_cfg = spec.get("sheet") or {}
+        extensions = (campaign["config"].get("sheet_extensions") or {}).get(tool["sheet_name"], [])
+        schema = current_schema(conn, tool["id"])
+        if schema is not None:
+            cols = loads(schema["columns_json"], [])
+            key_header = next(c["header"] for c in cols if c["role"] == "key")
+            plans.append(
+                SheetPlan(
+                    tool["id"],
+                    spec["label"],
+                    tool["sheet_name"],
+                    "generate_rows",
+                    key_header,
+                    "source_id",
+                    cols,
+                    extensions,
+                )
+            )
+            continue
         if spec["kind"] == "fortify":
             mode = sheet_cfg.get("mode", "generate_rows")
             key_header = sheet_cfg.get("key_header", "Instance ID")
@@ -123,7 +145,9 @@ def sheet_plans(conn: sqlite3.Connection, campaign: dict[str, Any]) -> tuple[lis
             inventory = next((s for s in spec["sources"] if s["role"] == "inventory"), None)
             default_key = (inventory or {}).get("mapping", {}).get("fields", {}).get("source_id", {}).get("source")
             key_header = sheet_cfg.get("key_header", default_key or "ID")
-        plans.append(SheetPlan(tool["id"], spec["label"], tool["sheet_name"], mode, key_header, "source_id"))
+        plans.append(
+            SheetPlan(tool["id"], spec["label"], tool["sheet_name"], mode, key_header, "source_id", None, extensions)
+        )
     return plans, without_sheet
 
 
@@ -193,17 +217,6 @@ def _key_text(v: Any) -> str | None:
     return s or None
 
 
-def _metadata_value(finding: sqlite3.Row, key: str) -> Any:
-    if key == "instance_id":
-        return finding["source_id"] if finding["source_id_kind"] == "native" else None
-    if key == "cwe_ids":
-        ids = loads(finding["cwe_ids_json"], [])
-        return format_cwe_ids(ids) if ids else None
-    if key in finding.keys():  # noqa: SIM118 — sqlite3.Row : `in` porte sur les valeurs, pas les clés
-        return finding[key]
-    return None
-
-
 def _last_written(conn: sqlite3.Connection, finding_id: str, column_key: str) -> tuple[bool, Any]:
     """Dernière valeur écrite par Paladin pour (finding, colonne), lors d'un export réussi."""
     row = conn.execute(
@@ -233,6 +246,44 @@ class _Plan:
     preserved: list[dict[str, Any]] = field(default_factory=list)
 
 
+def _metadata_columns(plan: SheetPlan, headers: dict[str, int]) -> dict[int, tuple[str, str, bool]]:
+    """Colonnes de métadonnées écrites dans les lignes générées : {colonne: (clé, source, texte)}."""
+    out: dict[int, tuple[str, str, bool]] = {}
+    if plan.schema_columns is not None:
+        for c in plan.schema_columns:
+            col = headers.get(_norm_header(c["header"]))
+            if col is None or c["role"] not in ("key", "metadata"):
+                continue
+            source = c["source"] if (c.get("source") or "").startswith("extra:") else c["key"]
+            out[col] = (c["key"], source, c["key"] != "line_number")
+        return out
+    for h, col in headers.items():
+        col_def = _DEFAULT_BY_HEADER.get(h)
+        if col_def is not None and not col_def.analyst:
+            out[col] = (col_def.key, col_def.key, col_def.text or col_def.key in TEXT_KEYS)
+    return out
+
+
+def _comparative_columns(
+    conn: sqlite3.Connection, plan: SheetPlan, headers: dict[str, int]
+) -> dict[int, tuple[str, str, str]]:
+    """`Found in X` / `criticality in X` : {colonne: (type, id de l'outil X, libellé X)}."""
+    tools = {
+        t["label"].lower(): t
+        for t in conn.execute(
+            "SELECT * FROM tool WHERE campaign_id = (SELECT campaign_id FROM tool WHERE id = ?)", (plan.tool_id,)
+        )
+    }
+    out: dict[int, tuple[str, str, str]] = {}
+    for h, col in headers.items():
+        for prefix, kind in (("found in ", "found_in"), ("criticality in ", "criticality_in")):
+            if h.startswith(prefix):
+                other = tools.get(h[len(prefix) :].strip())
+                if other is not None and other["id"] != plan.tool_id:
+                    out[col] = (kind, other["id"], other["label"])
+    return out
+
+
 def _plan_sheet(
     conn: sqlite3.Connection,
     ws: Worksheet,
@@ -248,6 +299,9 @@ def _plan_sheet(
             "Vérifier les en-têtes de l'onglet ou le mapping de la campagne.",
         )
     analyst_cols = {key: headers[h] for h, key in ANALYST_COLUMNS.items() if h in headers}
+    comparative_cols = _comparative_columns(conn, plan, headers)
+    meta_cols = _metadata_columns(plan, headers)
+    projections: dict[tuple[str, str], Projection] = {}
     missing = [h for h in ANALYST_COLUMNS if h not in headers]
     if missing:
         raise ExportBlockedError(
@@ -300,23 +354,26 @@ def _plan_sheet(
             row = next_row
             next_row += 1
             out.appended_rows.setdefault(plan.sheet, []).append(row)
-            for h, col in headers.items():
-                col_def = _DEFAULT_BY_HEADER.get(h)
-                if col_def is None or col_def.analyst:
-                    continue
-                value = _metadata_value(f, col_def.key)
+            for col, (key, source, text) in meta_cols.items():
+                value = finding_value(f, source)
+                if value is not None:
+                    out.writes.append(CellWrite(plan.sheet, row, col, key, None, value, f["id"], None, text))
+            for col, (kind, other_id, other_label) in comparative_cols.items():
+                proj = projections.setdefault((f["id"], other_id), projection(conn, f, other_id))
+                value = proj.found_in if kind == "found_in" else proj.criticality
                 if value is not None:
                     out.writes.append(
                         CellWrite(
                             plan.sheet,
                             row,
                             col,
-                            col_def.key,
+                            f"{kind}:{other_label}",
                             None,
                             value,
                             f["id"],
                             None,
-                            col_def.text or col_def.key in TEXT_KEYS,
+                            True,
+                            proj.relation_ids,
                         )
                     )
             for key, col in analyst_cols.items():
@@ -358,6 +415,20 @@ def _plan_sheet(
                         "paladin_value": new,
                     }
                 )
+        for col, (kind, other_id, other_label) in comparative_cols.items():
+            proj = projections.setdefault((f["id"], other_id), projection(conn, f, other_id))
+            new = proj.found_in if kind == "found_in" else proj.criticality
+            column_key = f"{kind}:{other_label}"
+            current = _cell_value(ws.cell(row=row, column=col).value)
+            if current == new:
+                continue
+            wrote_before, last = _last_written(conn, f["id"], column_key)
+            if current is None or (wrote_before and current == last) or (f["id"], column_key) in allow_overwrite:
+                out.writes.append(
+                    CellWrite(plan.sheet, row, col, column_key, current, new, f["id"], None, True, proj.relation_ids)
+                )
+            elif new is not None:
+                out.preserved.append({**label, "cell": f"{get_column_letter(col)}{row}", "value": current})
         if finding_ok and f["current_decision_id"]:
             out.up_to_date.add(f["id"])
 
@@ -491,19 +562,36 @@ def export_workbook(
         wb = load_workbook(source, data_only=False)
         sheet_order = list(wb.sheetnames)
         plan = _Plan()
+        expected_order = list(sheet_order)
         for sp in plans:
             if sp.sheet not in wb.sheetnames:
-                raise ExportBlockedError(
-                    f"Onglet {sp.sheet!r} absent du classeur.",
-                    "Créer l'onglet (palier P4 : schéma proposé) ou corriger la configuration.",
-                )
-            _plan_sheet(conn, wb[sp.sheet], sp, allow_overwrite or set(), plan)
+                if sp.schema_columns is None:
+                    raise ExportBlockedError(
+                        f"Onglet {sp.sheet!r} absent du classeur.",
+                        "Valider un schéma d'onglet pour cet outil (page « Nouvel onglet »)"
+                        " ou corriger la configuration.",
+                    )
+                ws_new = wb.create_sheet(sp.sheet)
+                expected_order.append(sp.sheet)
+                for i, c in enumerate(sp.schema_columns, start=1):
+                    ws_new.cell(row=1, column=i, value=c["header"])
+                    plan.writes.append(CellWrite(sp.sheet, 1, i, "header", None, c["header"], None, None, True))
+            ws = wb[sp.sheet]
+            existing = _header_map(ws)
+            next_col = ws.max_column + 1 if any(c.value is not None for c in ws[1]) else 1
+            for header in sp.extra_headers:
+                if _norm_header(header) not in existing:
+                    ws.cell(row=1, column=next_col, value=header)
+                    plan.writes.append(CellWrite(sp.sheet, 1, next_col, "header", None, header, None, None, True))
+                    existing[_norm_header(header)] = next_col
+                    next_col += 1
+            _plan_sheet(conn, ws, sp, allow_overwrite or set(), plan)
         _apply(wb, plan.writes)
         tmp = destination.with_name(f".~paladin-{run_id[:8]}{destination.suffix}")
         destination.parent.mkdir(parents=True, exist_ok=True)
         wb.save(tmp)
         wb.close()
-        problems = _verify(_snapshot(source), tmp, plan.writes, sheet_order)
+        problems = _verify(_snapshot(source), tmp, plan.writes, expected_order)
         if problems:
             tmp.unlink(missing_ok=True)
             raise ExportBlockedError(
@@ -549,15 +637,28 @@ def export_workbook(
         "preserved_human_values": plan.preserved,
         "tools_without_sheet": without_sheet,
         "externally_modified_since_last_export": externally_modified,
-        "comparative_columns": "non écrites (rapprochement inter-outils : palier P5)",
+        "comparative_cells_written": sum(
+            1 for w in plan.writes if w.column_key.startswith(("found_in:", "criticality_in:"))
+        ),
+        "sheets_created": [s for s in expected_order if s not in sheet_order],
     }
     manifest_path = exports / f"export-{run_id}.manifest.json"
     with store.transaction(conn):
         for w in plan.writes:
             conn.execute(
                 "INSERT INTO export_cell (export_run_id, finding_id, sheet_name, cell_ref, column_key, old_value,"
-                " new_value, decision_event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (run_id, w.finding_id, w.sheet, w.ref, w.column_key, dumps(w.old), dumps(w.new), w.decision_event_id),
+                " new_value, decision_event_id, relation_ids_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    run_id,
+                    w.finding_id,
+                    w.sheet,
+                    w.ref,
+                    w.column_key,
+                    dumps(w.old),
+                    dumps(w.new),
+                    w.decision_event_id,
+                    dumps(w.relation_ids) if w.relation_ids else None,
+                ),
             )
         for fid in plan.up_to_date:
             conn.execute(

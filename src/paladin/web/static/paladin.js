@@ -112,6 +112,17 @@
       }
     });
   } else {
-    document.addEventListener("keydown", (e) => { if (e.key === "?" && !typing(document.activeElement)) help.showModal(); });
+    const matchForm = document.getElementById("match-form");
+    document.addEventListener("keydown", (e) => {
+      if (typing(document.activeElement) || e.ctrlKey || e.metaKey || e.altKey || help.open) return;
+      if (e.key === "?") { help.showModal(); return; }
+      if (!matchForm) return;
+      const ids = { s: "m-same", c: "m-root", d: "m-diff", r: "m-defer", u: "m-undo" };
+      const el = document.getElementById(ids[e.key.toLowerCase()]);
+      if (el) el.click();
+    });
+    if (matchForm) matchForm.addEventListener("submit", (e) => {
+      matchForm.querySelectorAll("button").forEach((b) => { if (b !== e.submitter) b.disabled = true; });
+    });
   }
 })();

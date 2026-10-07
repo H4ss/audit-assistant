@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Lien {{ rel.id[:8] }} — Paladin{% endblock %}
+{% block content %}
+<div class="card-nav row">
+  <a class="btn small" href="/c/{{ campaign.id }}/match">← Rapprochement</a>
+  <span class="badge {{ 'warn' if rel.state in ('proposed', 'reexam_required') else ('ok' if rel.state == 'confirmed' else '') }}">{{ rel.state }}</span>
+  <span class="muted">proposé : {{ rel.proposed_type }} · score {{ rel.score }}{% if rel.cross_version %} · <strong>inter-version</strong>{% endif %}</span>
+</div>
+<section class="panel">
+  <div class="row wrap"><strong>Concordances :</strong> {% for e in evidence %}<span class="badge ok">{{ e }}</span>{% endfor %}</div>
+  {% if differences %}<div class="row wrap" style="margin-top:.4rem"><strong>Différences :</strong> {% for d in differences %}<span class="badge warn">{{ d }}</span>{% endfor %}</div>{% endif %}
+  {% set va = sides[0].decision.verdict if sides[0].decision else None %}{% set vb = sides[1].decision.verdict if sides[1].decision else None %}
+  {% if va and vb and va != vb %}<p class="callout warn">Verdicts en désaccord ({{ VERDICT_LABELS[va] }} / {{ VERDICT_LABELS[vb] }}) : le lien peut être confirmé, le désaccord reste visible et n'est pas corrigé automatiquement.</p>{% endif %}
+</section>
+<div class="review-grid" style="grid-template-columns: 1fr 1fr">
+  {% for s in sides %}{% set f = s.f %}
+  <section class="panel">
+    <div class="row wrap"><span class="badge tool">{{ f.tool_label }}</span><code class="sid">{{ f.source_id }}</code></div>
+    <h2>{{ f.category or 'Catégorie absente' }}</h2>
+    <dl class="kv">
+      <dt>Emplacement</dt><dd><code>{{ f.normalized_path or f.full_filename or '—' }}:{{ f.line_number or '?' }}</code></dd>
+      <dt>Fonction</dt><dd>{{ f.function_name or '—' }}</dd>
+      <dt>CWE</dt><dd>{{ s.cwe|join('; ') or '—' }}</dd>
+      <dt>Criticité (brute)</dt><dd>{{ f.criticality_raw or '—' }}</dd>
+      <dt>Version</dt><dd>{{ f.version_name or '—' }}</dd>
+      <dt>Verdict actuel</dt><dd>{{ VERDICT_LABELS[s.decision.verdict] if s.decision and s.decision.verdict else 'aucun' }}</dd>
+    </dl>
+    {% if s.excerpt %}<pre class="code numbered">{% for no, text in s.excerpt.lines %}<span class="{{ 'hl' if no in s.excerpt.highlight }}"><i>{{ no }}</i>{{ text }}</span>{% endfor %}</pre>{% endif %}
+  </section>
+  {% endfor %}
+</div>
+<section class="panel">
+  <form method="post" action="/c/{{ campaign.id }}/match/{{ rel.id }}/decide" id="match-form" class="row wrap">
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="hidden" name="revision" value="{{ rel.revision }}">
+    <button class="btn primary" name="op" value="same" id="m-same">Même occurrence <kbd>S</kbd></button>
+    <button class="btn" name="op" value="root" id="m-root">Cause commune seulement <kbd>C</kbd></button>
+    <button class="btn" name="op" value="different" id="m-diff">Différent <kbd>D</kbd></button>
+    <button class="btn" name="op" value="defer" id="m-defer">À revoir <kbd>R</kbd></button>
+    {% if rel.state in ('confirmed', 'rejected') %}<button class="btn" name="op" value="undo" id="m-undo">Annuler la décision <kbd>U</kbd></button>{% endif %}
+  </form>
+  <p class="small muted">Seul « Même occurrence » remplit « Found in &lt;outil&gt; ». Confirmer A–B et B–C ne confirme pas A–C.</p>
+  <details><summary>Historique</summary><ul class="small">{% for h in history %}<li>{{ h.created_at[:19].replace('T', ' ') }} — {{ h.action }} {{ h.relation_type or '' }} ({{ h.author }}){% if h.batch_id %} lot {{ h.batch_id[:8] }}{% endif %}{% if h.reason %} — {{ h.reason }}{% endif %}</li>{% endfor %}</ul></details>
+</section>
+{% endblock %}

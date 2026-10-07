@@ -17,7 +17,6 @@ Mise à jour à chaque palier. Le README n'annonce que ce qui est vérifié.
 - ToolB : dans la démo, l'inventaire Excel du concurrent est l'onglet `ToolB` du classeur cible (rôle configurable par source).
 - **Formules** : Paladin ne recalcule rien. openpyxl ne conserve pas les valeurs en cache des formules ; Excel les recalcule à l'ouverture, mais un lecteur sans moteur de calcul affichera des cellules vides.
 - **Classeurs non qualifiés pour l'écriture** (refusés avec un message) : macros, graphiques, images/dessins, tableaux croisés, objets incorporés, signatures, segments.
-- **Colonnes comparatives** (`Found in` / `criticality in`) : non écrites avant le palier P5.
 - **Lignes « MD sans ligne Excel »** : conservées comme propositions de nouvelle ligne, jamais ajoutées sans politique d'ajout validée.
 - **Contexte de l'identifiant** : outil | application | version déclarée par la source. Si une source change d'application ou de version déclarée, ses findings sont traités comme nouveaux (pas de fusion implicite).
 - **Inférence de mapping** : heuristique (synonymes FR/EN et forme des valeurs). Elle ne remplace pas la validation ; la proposition par l'agent pour les formats atypiques arrive au palier P4.
@@ -25,3 +24,6 @@ Mise à jour à chaque palier. Le README n'annonce que ce qui est vérifié.
 - **Propositions de la démo** : écrites à la main et marquées « proposition simulée » ; aucune ne provient d'un modèle.
 - **Interface** : un seul analyste (« analyste ») ; pas de multi-utilisateur. Les raccourcis et brouillons sont testés dans Chromium (CI Linux) ; Edge/Firefox sous Windows non testés automatiquement.
 - **Création de campagne** : par fichier JSON (`campaign create`) ; l'assistant graphique de création viendra avec le diagnostic (P4).
+- **Rapprochement** : comparateur déterministe (fichier, ligne, fonction, famille, CWE). Il n'appelle pas le modèle pour expliquer les candidats ; l'explication affichée est celle des règles. Un outil qui ne fournit pas de chemin de fichier ne produit aucun candidat (rien n'est déduit de la seule CWE).
+- **Schéma d'un nouvel onglet** : proposition déterministe à partir des données importées. La proposition par l'agent (OpenCode) n'est pas implémentée, ce qui ne bloque rien : l'édition manuelle couvre le besoin.
+- **Normalisation des criticités** : aucune échelle harmonisée n'est appliquée ; les criticités restent brutes (pas de comparaison numérique entre outils).

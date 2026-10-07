@@ -46,7 +46,7 @@ def test_exact_values_metadata_and_preservation(demo):
     assert r1["analysis result"] == "True Positive" and r1["Analysis result comment"] == DISCUSSION_COMMENT
     assert r1["Category"] == "SQL Injection" and r1["Fortify Category"] == "Input Validation and Representation"
     assert r1["Version name"] == "release" and r1["Line number"] == 12 and r1["CWE"] == "CWE-89"
-    assert r1["Found in ToolB"] is None  # comparatif : palier P5
+    assert r1["Found in ToolB"] == "Unknown"  # aucune comparaison lancée : jamais « non détecté »
     r2 = dict(zip(headers, fortify["FFFFFFFFFFFFFFFFFFFFFFFF00900002"], strict=True))
     assert r2["analysis result"] == "Not an issue" and r2["Analysis result comment"] == DISCUSSION_COMMENT
     r13 = dict(zip(headers, fortify[F13], strict=True))

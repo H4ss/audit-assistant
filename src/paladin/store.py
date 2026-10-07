@@ -46,6 +46,13 @@ def create_campaign(
     return campaign_id
 
 
+def update_campaign_config(conn: sqlite3.Connection, campaign_id: str, config: dict[str, Any]) -> None:
+    conn.execute(
+        "UPDATE campaign SET config_json = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
+        (dumps(config), utcnow(), campaign_id),
+    )
+
+
 def get_campaign(conn: sqlite3.Connection, campaign_id: str) -> dict[str, Any]:
     row = conn.execute("SELECT * FROM campaign WHERE id = ?", (campaign_id,)).fetchone()
     if row is None:

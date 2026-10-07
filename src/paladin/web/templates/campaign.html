@@ -33,7 +33,7 @@
               {% if t.report.unrecognized %}<details><summary>{{ t.report.unrecognized|length }} partie(s) non reconnue(s)</summary><ul>{% for u in t.report.unrecognized %}<li><code>{{ u.locator }}</code> — {{ u.reason }}</li>{% endfor %}</ul></details>{% endif %}
             {% else %}<span class="muted">jamais importé</span>{% endif %}
           </td>
-          <td>{{ t.sheet_name or "— (pas encore d'onglet)" }}</td>
+          <td>{% if t.sheet_name %}{{ t.sheet_name }}{% elif t.count %}<a href="/c/{{ campaign.id }}/tools/{{ t.label }}/schema">Proposer un onglet</a>{% else %}— (importer d'abord){% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -83,6 +83,12 @@
     <button class="btn">Mettre en file les findings sans proposition</button>
     <span class="small">puis lancer l'agent : <code>Paladin.cmd agent run --max-jobs 5</code> (Linux : <code>./paladin.sh agent run --max-jobs 5</code>)</span>
   </form>
+</section>
+
+<section class="panel">
+  <h2>4. Rapprochement inter-outils</h2>
+  <p>Relier les findings qui désignent le même problème dans plusieurs outils, pour remplir « Found in &lt;outil&gt; » et « criticality in &lt;outil&gt; ».</p>
+  <a class="btn" href="/c/{{ campaign.id }}/match">Ouvrir le rapprochement</a>
 </section>
 
 <section class="panel">
