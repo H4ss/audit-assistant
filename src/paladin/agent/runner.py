@@ -329,7 +329,11 @@ def _run_one(conn, exe: list[str], settings, campaign_id, model, worker, timeout
         return JobOutcome(job["id"], "proposition reçue", parsed["cost_usd"], seconds, detail)
     if job["status"] == "claimed" and job["lease_token"]:
         reason = "timeout" if code == -1 else f"session terminée sans proposition (code {code})"
-        jobs.fail(conn, job["id"], job["lease_token"], reason)
+        try:
+            jobs.fail(conn, job["id"], job["lease_token"], reason)
+        except jobs.JobError:
+            # Bail déjà expiré (veille du poste, session très longue) : le job sera simplement réclamé à nouveau.
+            reason += " ; bail expiré, job remis en file automatiquement"
         return JobOutcome(job["id"], "échec", parsed["cost_usd"], seconds, f"{reason} — journal : {log}")
     return JobOutcome(job["id"], job["status"], parsed["cost_usd"], seconds, job.get("error") or "")
 

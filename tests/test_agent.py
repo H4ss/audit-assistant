@@ -233,6 +233,24 @@ def test_runner_releases_job_when_session_ends_without_proposal(api, monkeypatch
     assert jobs.status(conn, "demo")["pending"] == 1  # remis en file, bail libéré
 
 
+def test_runner_survives_a_lease_expired_during_the_session(api, monkeypatch):
+    """Poste mis en veille pendant une session : le bail a expiré, l'exécution continue sans planter."""
+    conn = api["conn"]
+    jobs.enqueue_analysis(conn, "demo", [finding_by_source(conn, "TB-0001")["id"]])
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    monkeypatch.setenv("FAKE_OPENCODE_MODE", "silent")
+    monkeypatch.setattr(runner, "openrouter_usage", lambda key: None)
+
+    def expired(*a, **k):
+        raise jobs.JobError("Bail expiré : réclamer à nouveau un job.")
+
+    monkeypatch.setattr(jobs, "fail", expired)
+    report = runner.run_agent(
+        api["settings"], conn, "demo", max_jobs=1, budget_usd=1.0, opencode_cmd=FAKE, printer=lambda s: None
+    )
+    assert report.outcomes[0].status == "échec" and "bail expiré" in report.outcomes[0].detail
+
+
 def test_runner_respects_budget_with_provider_measure(api, monkeypatch):
     conn = api["conn"]
     jobs.enqueue_analysis(conn, "demo")
