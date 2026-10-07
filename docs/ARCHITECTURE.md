@@ -36,6 +36,11 @@
 | `review/decisions.py` | Décisions append-only, annulation, brouillons, révisions | P1 |
 | `review/queue.py` | Vues, ordre stable, compteurs, données de la carte | P2 |
 | `analysis.py` | Enregistrement des propositions, vérification des références, extraits de code | P2 |
+| `fortify/ssc.py` | Client SSC lecture seule (jeton, TLS, proxy, pagination, erreurs) | P4 |
+| `fortify/discovery.py`, `fortify/campaign.py` | Découverte groupée par préfixe, campagne par groupe | P4 |
+| `fortify/check.py` | Diagnostic de l'instance et rapport sans secret | P4 |
+| `agent/connect.py` | Connexion plug and play à l'OpenCode du poste | P4 |
+| `readiness.py` | Checklist « Prêt pour le travail ? » | P4 |
 | `campaigns.py` | Création d'une campagne réelle depuis un JSON validé | P2 |
 | `agent/` | Jobs avec bail, API agent, outils OpenCode, skill | P3 |
 | `matching/` | Rapprochement inter-outils, projections `Found in` | P5 |

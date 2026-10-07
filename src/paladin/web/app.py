@@ -37,7 +37,7 @@ from paladin.db import open_database
 from paladin.review import decisions as dec
 from paladin.review import queue as q
 from paladin.store import ConflictError
-from paladin.util import loads
+from paladin.util import loads, utcnow
 
 _HERE = Path(__file__).parent
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -133,6 +133,221 @@ def create_app(settings: Settings) -> FastAPI:
         return templates.TemplateResponse(request, name, ctx)
 
     # ------------------------------------------------------------------ pages
+
+    global_flash: dict[str, Any] = {}
+
+    def _gflash(message: str, level: str = "info", details: Any = None) -> None:
+        global_flash.update({"message": message, "level": level, "details": details})
+
+    def _pop_gflash() -> dict | None:
+        out = dict(global_flash) or None
+        global_flash.clear()
+        return out
+
+    @app.get("/agent", response_class=HTMLResponse)
+    def agent_page(request: Request, detect: int = 0):
+        from paladin.agent import connect
+        from paladin.agent.workspace import DEFAULT_MODEL
+
+        info = connect.detect(settings) if detect else None
+        return render(
+            request,
+            "agent.html",
+            info=info,
+            current=settings.agent.get("model"),
+            default=DEFAULT_MODEL,
+            flash=_pop_gflash(),
+            campaigns=store.list_campaigns(conn),
+        )
+
+    @app.post("/agent/connect")
+    async def agent_connect(request: Request):
+        from paladin.agent import connect
+
+        form = await _form(request)
+        model = (form.get("custom") or form.get("model") or "").strip()
+        try:
+            res = connect.smoke_test(settings, model)
+            connect.record_smoke(settings, res)
+        except ValueError as exc:
+            _gflash(str(exc), "warn")
+            return RedirectResponse("/agent", status_code=303)
+        if res.ok:
+            connect.save_model(settings, model)
+            _gflash(
+                f"Connecté : {model} a répondu « {res.answer} » en {res.seconds:.0f} s"
+                f" (coût {res.cost_usd or 0:.4f} $). Modèle enregistré.",
+                "ok",
+                ["Étape suivante recommandée : « Sondage de sécurité » ci-dessous."],
+            )
+        else:
+            _gflash(f"Échec avec {model} : {res.error}", "error", [f"→ {res.action}"])
+        return RedirectResponse("/agent", status_code=303)
+
+    @app.post("/agent/probe")
+    async def agent_probe(request: Request):
+        from paladin.agent.runner import AgentRunError, probe_agent
+
+        await _form(request)
+        try:
+            res = probe_agent(settings)
+        except AgentRunError as exc:
+            _gflash(str(exc), "error", [f"→ {exc.action}"])
+            return RedirectResponse("/agent", status_code=303)
+        if res.ok:
+            _gflash(
+                "Sondage OK : l'agent n'a exécuté aucun outil hors paladin_* (shell, fichiers, réseau).",
+                "ok",
+                [f"Réponse du modèle : {res.model_text[:300]}"],
+            )
+        else:
+            _gflash(
+                f"ALERTE : outils interdits exécutés {res.forbidden}. Ne pas utiliser l'agent.",
+                "error",
+                [f"Journal : {res.log}"],
+            )
+        return RedirectResponse("/agent", status_code=303)
+
+    # ------------------------------------------------- PC de travail : checklist, SSC
+
+    @app.get("/travail", response_class=HTMLResponse)
+    def travail(request: Request):
+        from paladin import readiness
+
+        items = readiness.checklist(settings, conn)
+        sections: dict[str, list] = {}
+        for it in items:
+            sections.setdefault(it.section, []).append(it)
+        done = sum(1 for it in items if it.status == readiness.OK)
+        return render(
+            request,
+            "travail.html",
+            sections=sections,
+            done=done,
+            total=len(items),
+            fortify=settings.fortify,
+            flash=_pop_gflash(),
+            campaigns=store.list_campaigns(conn),
+        )
+
+    @app.post("/travail/ssc")
+    async def travail_ssc(request: Request):
+        from paladin.config import set_config_value
+        from paladin.fortify.ssc import save_token
+
+        form = await _form(request)
+        url = form.get("url", "").strip()
+        ca = form.get("ca_bundle", "").strip()
+        set_config_value(settings.config_path, "fortify", "url", url)
+        set_config_value(settings.config_path, "fortify", "ca_bundle", ca)
+        settings.fortify.update({"url": url, "ca_bundle": ca})
+        if form.get("ssc_token", "").strip():
+            save_token(settings, form["ssc_token"])
+        _gflash("Paramètres SSC enregistrés (jeton stocké hors du dépôt). Lancer le diagnostic.", "ok")
+        return RedirectResponse("/travail#ssc", status_code=303)
+
+    @app.post("/travail/check")
+    async def travail_check(request: Request):
+        from paladin import readiness
+        from paladin.fortify.check import STATE_BLOCKED, run_check, write_report
+
+        await _form(request)
+        rep = run_check(settings)
+        write_report(settings, rep)
+        readiness.record(settings, "fortify_check", rep.state != STATE_BLOCKED, rep.state, report="/travail/rapport")
+        details = [
+            f"[{c.status.value}] {c.area}/{c.name} : {c.detail}"
+            + (f" → {c.action}" if c.action and c.status.value != "OK" else "")
+            for c in rep.checks
+        ]
+        _gflash(f"Diagnostic : {rep.state}", "error" if rep.state == STATE_BLOCKED else "ok", details)
+        return RedirectResponse("/travail#ssc", status_code=303)
+
+    @app.get("/travail/rapport", response_class=HTMLResponse)
+    def travail_rapport(request: Request):
+        reports = sorted((settings.home / "reports").glob("fortify-check-*.md"))
+        text = reports[-1].read_text(encoding="utf-8") if reports else "Aucun rapport : lancer le diagnostic."
+        return render(request, "report.html", text=text, path=str(reports[-1]) if reports else "")
+
+    def _discovery_file():
+        return settings.home / "run" / "ssc_discovery.json"
+
+    @app.get("/fortify/discover", response_class=HTMLResponse)
+    def fortify_discover_page(request: Request):
+        import json as _json
+
+        path = _discovery_file()
+        cached = _json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+        return render(
+            request, "discover.html", cached=cached, flash=_pop_gflash(), campaigns=store.list_campaigns(conn)
+        )
+
+    @app.post("/fortify/discover")
+    async def fortify_discover_run(request: Request):
+        import json as _json
+
+        from paladin.fortify.discovery import discover
+        from paladin.fortify.ssc import make_client
+        from paladin.importers.fortify import FortifyError
+
+        form = await _form(request)
+        try:
+            groups = discover(make_client(settings), name_filter=form.get("filter") or None)
+        except FortifyError as exc:
+            _gflash(str(exc), "error", [f"→ {exc.action}"])
+            return RedirectResponse("/fortify/discover", status_code=303)
+        path = _discovery_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            _json.dumps(
+                {"at": utcnow(), "filter": form.get("filter") or "", "groups": [g.as_dict() for g in groups]},
+                ensure_ascii=False,
+                default=str,
+            ),
+            encoding="utf-8",
+        )
+        return RedirectResponse("/fortify/discover", status_code=303)
+
+    @app.post("/fortify/create")
+    async def fortify_create(request: Request):
+        import json as _json
+
+        from paladin.fortify.campaign import SSCCampaignError, create_campaign_from_group
+        from paladin.fortify.discovery import Group, SubApp
+
+        form = await request.form()
+        if form.get("token") != ui_token:
+            raise HTTPException(403, "Jeton d'interface invalide : recharger la page.")
+        keys = [str(k) for k in form.getlist("group")]
+        cached = _json.loads(_discovery_file().read_text(encoding="utf-8"))
+        repos = [Path(x.strip()) for x in str(form.get("repos", "")).splitlines() if x.strip()]
+        workbook = str(form.get("workbook", "")).strip()
+        created, errors = [], []
+        for g in cached["groups"]:
+            if g["key"] not in keys:
+                continue
+            group = Group(g["key"], [SubApp(**a) for a in g["apps"]])
+            try:
+                created.append(
+                    create_campaign_from_group(
+                        settings, conn, group, repo_paths=repos, target_workbook=Path(workbook) if workbook else None
+                    )
+                )
+            except SSCCampaignError as exc:
+                errors.append(f"{g['key']} : {exc}")
+        if errors:
+            _gflash("Certaines entrées n'ont pas été créées.", "warn", errors)
+        if len(created) == 1 and not errors:
+            _flash(
+                conn,
+                created[0],
+                "Campagne créée à partir de SSC. Étape suivante : « Importer / réimporter les sources ».",
+                "ok",
+            )
+            return RedirectResponse(f"/c/{created[0]}", status_code=303)
+        if created:
+            _gflash(f"Campagnes créées : {', '.join(created)}. Ouvrir chacune et cliquer « Importer ».", "ok")
+        return RedirectResponse("/fortify/discover", status_code=303)
 
     @app.get("/health")
     def health() -> dict:
@@ -374,7 +589,7 @@ def create_app(settings: Settings) -> FastAPI:
         lines, level = [], "ok"
         for label in labels:
             report = import_tool(settings, conn, cid, label)
-            line = report.summary()
+            line = report.summary() + "".join(f" · {n}" for n in report.notes)
             if report.blocked:
                 level = "warn"
                 line += f" — BLOQUÉ : {report.blocked['message']}"
