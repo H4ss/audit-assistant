@@ -37,7 +37,7 @@ Pour tout relancer : `python -m pytest -q`. Le test navigateur se lance avec `PA
 | Lien confirmé puis annulé | Projection périmée, corrigeable | `test_export_writes_comparative_cells_and_goes_stale_on_undo` |
 | Installation fraîche Windows/Linux | Démo sans Docker ni clé | CI : Windows et Linux 3.14, Linux 3.12, `Paladin.cmd` / `paladin.sh` |
 | Analyses manuelles dans un classeur personnel | Colonnes et verdicts reconnus, lignes rapprochées, rien deviné en silence | `test_own_workbook_columns_are_inferred…`, `test_import_creates_traceable_decisions…` |
-| Calibration à l'aveugle | Référence jamais montrée, décisions intactes, TP manqués en tête du rapport | `test_blind_analysis_never_touches_decisions…`, `test_shown_precedent_can_no_longer_become_reference` |
+| Calibration à l'aveugle | Référence jamais montrée, décisions intactes, TP manqués en tête du rapport | `test_blind_analysis_never_touches_decisions…`, `test_shown_precedent_can_no_longer_become_reference` ; vérifié en réel (GLM 5.3, 3 cas de référence : 3 accords, 9/9 références vérifiées, convention citée par l'agent, 0,19 $ mesurés, 78 à 207 s par cas) |
 | Agent GLM connecté | Proposition réelle reçue sans copier-coller | Vérifié en réel (OpenCode 2.0.22 + `z-ai/glm-5.3`, 5 analyses, références vérifiées) ; `tests/test_real_agent.py` (opt-in) |
 
 ## Démonstration de la section 24.5
