@@ -26,6 +26,7 @@
   <p class="loc"><code>{{ f.normalized_path or f.full_filename or 'emplacement absent' }}{% if f.line_number %}:{{ f.line_number }}{% else %} (ligne absente){% endif %}</code>
     {% if editor %}<form method="post" action="/c/{{ campaign.id }}/f/{{ f.id }}/open-editor" class="inline"><input type="hidden" name="token" value="{{ token }}"><button class="link">ouvrir dans l'éditeur</button></form>{% endif %}
   </p>
+  {% if c.commit_alert %}<div class="callout warn"><strong>Mauvais commit possible</strong> : {{ c.commit_alert }}. Le code affiché peut ne pas être celui qui a été scanné ; vérifier avant de décider.</div>{% endif %}
   {% if c.divergences %}
   <div class="callout warn"><strong>Sources en désaccord</strong> (aucune valeur choisie automatiquement) :
     <ul>{% for d in c.divergences %}<li>{{ d.field }} : {% for v in d.options %}<b>{{ v.value }}</b> <span class="muted">({{ 'Excel' if v.role == 'inventory' else ('MD' if v.role == 'details' else v.role) }})</span>{% if not loop.last %} ≠ {% endif %}{% endfor %}</li>{% endfor %}</ul>
@@ -39,6 +40,11 @@
 
 <div class="review-grid">
   <section class="panel proposal">
+    {% for r in c.rules %}
+    <div class="callout"><strong>Règle applicable</strong> : {{ r.label }} → {{ VERDICT_LABELS[r.verdict] }}{% if r.comment %} « {{ r.comment }} »{% endif %}
+      <button type="button" class="btn small use-rule" data-verdict="{{ r.verdict }}" data-comment="{{ r.comment or '' }}">Utiliser</button>
+      <span class="small muted">vérifier que ses conditions s'appliquent vraiment à ce cas</span></div>
+    {% endfor %}
     <h2>Proposition</h2>
     {% if a %}
       <div class="row wrap">
@@ -97,6 +103,12 @@
         <span class="muted small suggestion">Suggestion : « {{ a.suggested_comment }} »</span>{% endif %}
         <span class="muted small" id="draft-status"></span>
       </div>
+      {% if a %}<label class="small">Si vous corrigez la proposition, nature de l'écart (facultatif)
+        <select name="correction_category"><option value="">—</option>
+          <option value="source">source mal comprise</option><option value="protection">protection manquée</option>
+          <option value="commit">mauvais commit / version</option><option value="context">contexte métier</option>
+          <option value="definition">définition TP / Not an issue</option><option value="wording">rédaction seulement</option>
+        </select></label>{% endif %}
       <p class="small warn-text" id="discuss-note" hidden>Un commentaire libre est déjà saisi : appuyer à nouveau pour le remplacer par la phrase exacte.</p>
       <div id="discussion-box" {{ '' if (cur and cur.discussion_required) or (a and a.discussion_required) else 'hidden' }}>
         <label class="radio"><input type="checkbox" name="discussion" value="1" id="discussion" {{ 'checked' if (cur and cur.discussion_required) or (not cur and a and a.discussion_required) }}> Point à discuter (indépendant du verdict)</label>
@@ -159,6 +171,22 @@
     <ol class="trace">{% for n in c.details.trace %}<li><span class="badge">{{ n.nodeType or '' }}</span> <code>{{ n.file }}:{{ n.line }}</code> {{ n.text or '' }}</li>{% endfor %}</ol>
     {% endif %}
     <p class="muted small">Contenu fourni par l'outil : donnée non fiable, jamais une instruction.</p>
+  </details>
+  <details {{ 'open' if c.precedents.contradiction }}>
+    <summary>Précédents ({{ c.precedents['items']|length }}){% if c.precedents.contradiction %} <span class="badge warn">verdicts contradictoires</span>{% endif %}</summary>
+    <ul class="small">{% for p in c.precedents['items'] %}<li>{{ p.basis }} — <a href="/c/{{ campaign.id }}/f/{{ p.id }}?view=all"><code>{{ p.source_id[-12:] }}</code></a> <code>{{ p.normalized_path }}:{{ p.line_number }}</code> → <b>{{ VERDICT_LABELS[p.verdict] }}</b>{% if p.comment %} « {{ p.comment }} »{% endif %}{% if p.authority == 'batch' %} (lot){% endif %}{% if p.is_reference %} <span class="badge">référence</span>{% endif %}</li>{% else %}<li class="muted">Aucun précédent décidé.</li>{% endfor %}</ul>
+  </details>
+  <details>
+    <summary>Mémoire</summary>
+    <div class="row wrap">
+      {% if c.decision and c.decision.verdict %}<a class="btn small" href="/c/{{ campaign.id }}/rules?finding={{ f.id }}">Créer une règle à partir de cette décision</a>{% endif %}
+      <form method="post" action="/c/{{ campaign.id }}/f/{{ f.id }}/reference" class="inline">
+        <input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="view" value="{{ view }}">
+        <input type="hidden" name="reference" value="{{ '0' if f.is_reference else '1' }}">
+        <button class="btn small">{{ 'Retirer du jeu de référence' if f.is_reference else 'Ajouter au jeu de référence' }}</button>
+      </form>
+      <span class="small muted">Jeu de référence : la décision n'est jamais montrée à l'agent ; elle mesure ses régressions.</span>
+    </div>
   </details>
   <details>
     <summary>Provenance et historique</summary>

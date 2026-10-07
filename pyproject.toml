@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "project-paladin"
-version = "0.5.0"
+version = "0.6.0"
 description = "Assistant local de triage et de comparaison AppSec (Fortify, rapports MD, Excel)."
 readme = "README.md"
 requires-python = ">=3.12"

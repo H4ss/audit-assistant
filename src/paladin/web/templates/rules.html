@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Règles — {{ campaign.name }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Règles réutilisables</h1>
+  <p class="muted">Une règle est créée à partir d'une décision, avec des conditions vérifiables. Elle reste <em>proposée</em> jusqu'à validation et n'applique jamais rien seule : elle s'affiche comme « règle applicable » et sert de base aux lots. La révoquer met en réexamen les décisions qui en dérivent.</p>
+</section>
+{% if draft %}
+<section class="panel">
+  <h2>Nouvelle règle à partir de {{ draft.finding.source_id }}</h2>
+  {% if not draft.decision or not draft.decision.verdict %}
+    <p class="callout warn">Ce finding n'a pas de décision finale : décider d'abord (une investigation ne peut pas servir d'exemple).</p>
+  {% else %}
+  <p>Exemple accepté : <strong>{{ VERDICT_LABELS[draft.decision.verdict] }}</strong>{% if draft.decision.comment %} · « {{ draft.decision.comment }} »{% endif %} — <code>{{ draft.finding.normalized_path }}:{{ draft.finding.line_number }}</code></p>
+  <form method="post" action="/c/{{ campaign.id }}/rules/create">
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="hidden" name="finding_id" value="{{ draft.finding.id }}">
+    <label>Titre <input type="text" name="title" value="{{ draft.finding.category or 'Règle' }} — {{ VERDICT_LABELS[draft.decision.verdict] }}"></label>
+    <p class="small muted">Conditions (toutes doivent être vraies ; vider un champ pour l'ignorer) :</p>
+    <label>Outil <input type="text" name="cond_tool" value="{{ draft.conditions.tool or '' }}"></label>
+    <label>Règle source (ID exact) <input type="text" name="cond_primary_rule_id" value="{{ draft.conditions.primary_rule_id or '' }}"></label>
+    <label>Famille interne <input type="text" name="cond_family" value="{{ draft.conditions.family or '' }}"></label>
+    <label>Motif de chemin (ex. <code>shop-api/tests/*</code>) <input type="text" name="cond_path_glob" value=""></label>
+    <label>Fonction <input type="text" name="cond_function_name" value="{{ draft.conditions.function_name or '' }}"></label>
+    <label>Point d'impact exact (fichier:ligne) <input type="text" name="cond_sink" value="{{ draft.conditions.sink or '' }}"></label>
+    <label class="radio"><input type="checkbox" name="app_scope" value="1" checked> Limiter à l'application {{ draft.finding.application_name }}</label>
+    <label>Exceptions (IDs source séparés par des virgules) <input type="text" name="exceptions"></label>
+    <label>Contre-exemple (facultatif) <input type="text" name="counter_example" placeholder="ex. même fonction appelée avec une valeur venant de la requête"></label>
+    <button class="btn primary">Proposer la règle</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+<section class="panel">
+  <h2>Règles</h2>
+  <table class="table">
+    <thead><tr><th>État</th><th>Règle</th><th>Conditions</th><th>Verdict</th><th>Décisions dérivées</th><th></th></tr></thead>
+    {% for r in rules %}
+    <tr class="{{ 'muted' if r.status == 'revoked' }}">
+      <td><span class="badge {{ 'ok' if r.status == 'active' else ('warn' if r.status == 'proposed' else '') }}">{{ r.status }}</span></td>
+      <td><strong>{{ r.label }}</strong>{% if r.example %}<br><span class="small muted">exemple : {{ r.example.source_id }} ({{ r.example.location }})</span>{% endif %}</td>
+      <td class="small">{% for k, v in r.conditions.items() %}<code>{{ k }}={{ v }}</code> {% endfor %}{% if r.scope.application_name %}<br>portée : {{ r.scope.application_name }}{% endif %}{% if r.exceptions %}<br>exceptions : {{ r.exceptions|join(', ') }}{% endif %}</td>
+      <td>{{ VERDICT_LABELS.get(r.verdict, '—') }}{% if r.comment %}<br><span class="small">« {{ r.comment }} »</span>{% endif %}</td>
+      <td>{{ derived[r.id] }}</td>
+      <td>
+        {% if r.status == 'proposed' %}<form method="post" action="/c/{{ campaign.id }}/rules/{{ r.id }}/validate" class="inline"><input type="hidden" name="token" value="{{ token }}"><button class="btn small">Valider</button></form>{% endif %}
+        {% if r.status != 'revoked' %}<form method="post" action="/c/{{ campaign.id }}/rules/{{ r.id }}/revoke" class="inline"><input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="reason" value="révoquée depuis l'interface"><button class="btn small" data-confirm="Révoquer ? Les {{ derived[r.id] }} décision(s) dérivée(s) passeront en réexamen.">Révoquer</button></form>{% endif %}
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="6" class="muted">Aucune règle. Sur une fiche décidée : « Créer une règle à partir de cette décision ».</td></tr>{% endfor %}
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Mesures — {{ campaign.name }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Mesures du pilote</h1>
+  <p class="muted">Effectifs, pas de score. Les propositions simulées de la démo sont comptées à part.</p>
+  <div class="grid">
+    <div class="tile"><strong>{{ m.decided }}</strong> décision(s) finales <span class="small muted">{{ m.decided_individual }} individuelle(s), {{ m.decided_batch }} par lot · TP {{ m.decided_tp }} / Not an issue {{ m.decided_nai }}</span></div>
+    <div class="tile"><strong>{{ m.investigating }}</strong> à investiguer</div>
+    <div class="tile"><strong>{{ m.proposals }}</strong> proposition(s) <span class="small muted">dont {{ m.proposals_simulated }} simulée(s) · {{ m.abstentions }} indéterminée(s)</span></div>
+    <div class="tile"><strong>{{ m.decisions_per_hour if m.decisions_per_hour is not none else '—' }}</strong> décisions / heure active <span class="small muted">{{ m.active_hours }} h actives (écarts &lt; 15 min)</span></div>
+  </div>
+</section>
+<section class="panel">
+  <h2>Propositions face aux décisions</h2>
+  <table class="table">
+    <tr><td>Décisions comparables à une proposition finale</td><td>{{ m.compared }}</td></tr>
+    <tr><td>Acceptées telles quelles</td><td>{{ m.accepted }}</td></tr>
+    <tr><td>Verdict corrigé</td><td>{{ m.verdict_changed }}</td></tr>
+    <tr><td>Commentaire seul corrigé</td><td>{{ m.comment_only }}</td></tr>
+    <tr><td><strong>Vrais problèmes proposés « Not an issue »</strong></td><td><strong>{{ m.missed_tp|length }}</strong>{% if m.missed_tp %} — {{ m.missed_tp|join(', ') }}{% endif %}</td></tr>
+    <tr><td>Proposés « True Positive », décidés « Not an issue »</td><td>{{ m.overcalled|length }}{% if m.overcalled %} — {{ m.overcalled|join(', ') }}{% endif %}</td></tr>
+    <tr><td>Références de code invalides</td><td>{{ m.bad_references }} / {{ m.all_references }}</td></tr>
+    <tr><td>Jeu de référence : propositions conformes</td><td>{{ m.reference_agree }} / {{ m.reference_total }}</td></tr>
+  </table>
+  {% if m.categories %}<p>Écarts déclarés : {% for k, v in m.categories.items() %}<span class="badge">{{ k }} : {{ v }}</span> {% endfor %}</p>{% endif %}
+  <p class="small muted">Un petit pilote estime le rendement ; il ne démontre pas un taux d'erreur très faible.</p>
+</section>
+<section class="panel">
+  <h2>Rechercher dans la mémoire</h2>
+  <form method="get" class="row"><input type="search" name="search" value="{{ search }}" placeholder="commentaire, justification, catégorie…"><button class="btn">Chercher</button></form>
+  {% if results is not none %}
+  <ul>{% for r in results %}<li><a href="/c/{{ campaign.id }}/f/{{ r.id }}?view=all"><code>{{ r.source_id[-12:] }}</code></a> {{ r.category or '' }} — {{ VERDICT_LABELS.get(r.verdict, 'sans décision') }}{% if r.comment %} « {{ r.comment }} »{% endif %}</li>{% else %}<li class="muted">Aucun résultat.</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+{% endblock %}
