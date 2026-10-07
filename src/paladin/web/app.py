@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from paladin import __version__, store
+from paladin.agent import jobs as agent_jobs
 from paladin.analysis import safe_repo_file
 from paladin.config import Settings
 from paladin.contracts import (
@@ -81,16 +82,26 @@ def create_app(settings: Settings) -> FastAPI:
         yield
         conn.close()
 
-    app = FastAPI(title="Paladin", version=__version__, docs_url=None, redoc_url=None, openapi_url=None,
-                  lifespan=lifespan)
+    app = FastAPI(
+        title="Paladin", version=__version__, docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
+    )
     app.state.settings = settings
     app.state.conn = conn
     templates = Jinja2Templates(directory=str(_HERE / "templates"))
     templates.env.globals.update(
-        version=__version__, token=ui_token, VERDICT_LABELS=VERDICT_LABELS, EXPORT_LABELS=EXPORT_LABELS,
-        REVIEW_LABELS=REVIEW_LABELS, VIEWS=q.VIEWS, DISCUSSION_COMMENT=DISCUSSION_COMMENT,
+        version=__version__,
+        token=ui_token,
+        VERDICT_LABELS=VERDICT_LABELS,
+        EXPORT_LABELS=EXPORT_LABELS,
+        REVIEW_LABELS=REVIEW_LABELS,
+        VIEWS=q.VIEWS,
+        DISCUSSION_COMMENT=DISCUSSION_COMMENT,
     )
     app.mount("/static", StaticFiles(directory=str(_HERE / "static")), name="static")
+    from paladin.agent.api import build_router
+    from paladin.agent.workspace import skill_version
+
+    app.include_router(build_router(conn, settings.agent_token(), skill_version()))
 
     @app.middleware("http")
     async def local_only(request: Request, call_next):
@@ -146,28 +157,50 @@ def create_app(settings: Settings) -> FastAPI:
                 "SELECT * FROM import_run WHERE tool_id = ? ORDER BY started_at DESC LIMIT 1", (t["id"],)
             ).fetchone()
             count = conn.execute("SELECT COUNT(*) FROM finding WHERE tool_id = ?", (t["id"],)).fetchone()[0]
-            tools.append({**t, "count": count, "run": dict(run) if run else None,
-                          "report": loads(run["report_json"], {}) if run else {}})
+            tools.append(
+                {
+                    **t,
+                    "count": count,
+                    "run": dict(run) if run else None,
+                    "report": loads(run["report_json"], {}) if run else {},
+                }
+            )
         last_export = conn.execute(
             "SELECT * FROM export_run WHERE campaign_id = ? ORDER BY created_at DESC LIMIT 1", (cid,)
         ).fetchone()
         last = store.get_ui_state(conn, cid, "last_finding")
         return render(
-            request, "campaign.html", campaign=campaign, counters=q.counters(conn, cid), tools=tools,
+            request,
+            "campaign.html",
+            campaign=campaign,
+            counters=q.counters(conn, cid),
+            tools=tools,
             pending_profiles=[p for p in profiles.list_profiles(conn, cid) if p["status"] == "proposed"],
             last_export=dict(last_export) if last_export else None,
             last_export_summary=loads(last_export["summary_json"], {}) if last_export else {},
-            last_finding=last, last_decided=q.last_decided(conn, cid), flash=_pop_flash(conn, cid),
+            last_finding=last,
+            last_decided=q.last_decided(conn, cid),
+            flash=_pop_flash(conn, cid),
             home=str(settings.home),
+            agent=agent_jobs.status(conn, cid),
         )
 
     @app.get("/c/{cid}/queue", response_class=HTMLResponse)
     def queue_page(request: Request, cid: str, view: str = "todo", tool: str = "", search: str = ""):
         campaign = _campaign(cid)
         rows = q.list_findings(conn, cid, view, tool or None, search or None)
-        return render(request, "queue.html", campaign=campaign, rows=rows, view=view, tool=tool, search=search,
-                      tools=[t["label"] for t in store.list_tools(conn, cid)], counters=q.counters(conn, cid),
-                      flash=_pop_flash(conn, cid))
+        return render(
+            request,
+            "queue.html",
+            campaign=campaign,
+            rows=rows,
+            view=view,
+            tool=tool,
+            search=search,
+            tools=[t["label"] for t in store.list_tools(conn, cid)],
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+        )
 
     @app.get("/c/{cid}/next", response_class=HTMLResponse)
     def start_view(cid: str, view: str = "todo", tool: str = ""):
@@ -175,7 +208,9 @@ def create_app(settings: Settings) -> FastAPI:
         if not rows:
             _flash(conn, cid, f"Rien dans la vue « {q.VIEWS.get(view, view)} ».")
             return RedirectResponse(f"/c/{cid}/queue?{urlencode({'view': view, 'tool': tool})}", status_code=303)
-        return RedirectResponse(f"/c/{cid}/f/{rows[0]['id']}?{urlencode({'view': view, 'tool': tool})}", status_code=303)
+        return RedirectResponse(
+            f"/c/{cid}/f/{rows[0]['id']}?{urlencode({'view': view, 'tool': tool})}", status_code=303
+        )
 
     @app.get("/c/{cid}/f/{fid}", response_class=HTMLResponse)
     def card_page(request: Request, cid: str, fid: str, view: str = "todo", tool: str = ""):
@@ -184,13 +219,24 @@ def create_app(settings: Settings) -> FastAPI:
             c = q.card(conn, cid, fid, view, tool or None)
         except LookupError:
             raise HTTPException(404, "Finding inconnu") from None
-        store.set_ui_state(conn, cid, "last_finding", {"id": fid, "source_id": c.finding["source_id"],
-                                                        "view": view, "tool": tool})
+        store.set_ui_state(
+            conn, cid, "last_finding", {"id": fid, "source_id": c.finding["source_id"], "view": view, "tool": tool}
+        )
         prev_id = q.neighbour(conn, cid, fid, view, tool or None, -1)
         next_id = q.neighbour(conn, cid, fid, view, tool or None, +1)
-        return render(request, "card.html", campaign=campaign, c=c, view=view, tool=tool, prev_id=prev_id,
-                      next_id=next_id, counters=q.counters(conn, cid), flash=_pop_flash(conn, cid),
-                      editor=bool(settings.editor.get("open_command")))
+        return render(
+            request,
+            "card.html",
+            campaign=campaign,
+            c=c,
+            view=view,
+            tool=tool,
+            prev_id=prev_id,
+            next_id=next_id,
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+            editor=bool(settings.editor.get("open_command")),
+        )
 
     # ---------------------------------------------------------------- actions
 
@@ -217,10 +263,16 @@ def create_app(settings: Settings) -> FastAPI:
                 dec.record_decision(conn, fid, expected_revision=revision, action=DecisionAction.SKIP, author=AUTHOR)
                 return _after(cid, fid, view, tool, move=True)
             if op == "investigate":
-                dec.record_decision(conn, fid, expected_revision=revision, action=DecisionAction.INVESTIGATE,
-                                    author=AUTHOR, investigation_question=form.get("question"),
-                                    investigation_reason=form.get("reason"),
-                                    analysis_id=form.get("analysis_id") or None)
+                dec.record_decision(
+                    conn,
+                    fid,
+                    expected_revision=revision,
+                    action=DecisionAction.INVESTIGATE,
+                    author=AUTHOR,
+                    investigation_question=form.get("question"),
+                    investigation_reason=form.get("reason"),
+                    analysis_id=form.get("analysis_id") or None,
+                )
                 _flash(conn, cid, "Mis « À investiguer » — décision enregistrée, aucune valeur Excel.", "ok")
                 return _after(cid, fid, view, tool, move=True)
             if op == "decide":
@@ -229,17 +281,31 @@ def create_app(settings: Settings) -> FastAPI:
                     raise dec.DecisionError("Choisir True Positive ou Not an issue (ou « À investiguer »).")
                 comment = form.get("comment", "")
                 analysis = latest_analysis(conn, fid)
-                accepted = analysis is not None and analysis["proposed_verdict"] == verdict and comment.strip() in (
-                    "", (analysis["suggested_comment"] or "").strip())
+                accepted = (
+                    analysis is not None
+                    and analysis["proposed_verdict"] == verdict
+                    and comment.strip() in ("", (analysis["suggested_comment"] or "").strip())
+                )
                 discussion = form.get("discussion") == "1" or comment.strip() == DISCUSSION_COMMENT
                 dec.record_decision(
-                    conn, fid, expected_revision=revision,
-                    action=DecisionAction.ACCEPT if accepted else DecisionAction.CORRECT, author=AUTHOR,
-                    verdict=Verdict(verdict), comment=comment, analysis_id=analysis["id"] if analysis else None,
-                    discussion_required=discussion, discussion_reason=form.get("discussion_reason") or None,
+                    conn,
+                    fid,
+                    expected_revision=revision,
+                    action=DecisionAction.ACCEPT if accepted else DecisionAction.CORRECT,
+                    author=AUTHOR,
+                    verdict=Verdict(verdict),
+                    comment=comment,
+                    analysis_id=analysis["id"] if analysis else None,
+                    discussion_required=discussion,
+                    discussion_reason=form.get("discussion_reason") or None,
                 )
                 f = conn.execute("SELECT export_state FROM finding WHERE id = ?", (fid,)).fetchone()
-                _flash(conn, cid, f"Décision enregistrée ({VERDICT_LABELS[verdict]}). {EXPORT_LABELS[f['export_state']]}.", "ok")
+                _flash(
+                    conn,
+                    cid,
+                    f"Décision enregistrée ({VERDICT_LABELS[verdict]}). {EXPORT_LABELS[f['export_state']]}.",
+                    "ok",
+                )
                 return _after(cid, fid, view, tool, move=form.get("next") != "0")
             raise dec.DecisionError("Action inconnue.")
         except ConflictError as exc:
@@ -277,6 +343,28 @@ def create_app(settings: Settings) -> FastAPI:
         dec.save_draft(conn, fid, verdict, (body.get("comment") or "")[:4000])
         return JSONResponse({"saved": True})
 
+    @app.post("/c/{cid}/agent/enqueue")
+    async def agent_enqueue(request: Request, cid: str):
+        await _form(request)
+        n = agent_jobs.enqueue_analysis(conn, cid)
+        _flash(conn, cid, f"{n} finding(s) mis en file pour l'agent." if n else "Aucun finding à mettre en file.", "ok")
+        return RedirectResponse(f"/c/{cid}", status_code=303)
+
+    @app.get("/api/c/{cid}/f/{fid}/status")
+    def finding_status(cid: str, fid: str):
+        row = conn.execute(
+            "SELECT f.revision, f.processing_state, (SELECT MAX(seq) FROM analysis a WHERE a.finding_id = f.id) AS seq"
+            " FROM finding f WHERE f.id = ? AND f.campaign_id = ?",
+            (fid, cid),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Finding inconnu")
+        return {
+            "revision": row["revision"],
+            "processing_state": row["processing_state"],
+            "analysis_seq": row["seq"] or 0,
+        }
+
     @app.post("/c/{cid}/import")
     async def run_import(request: Request, cid: str):
         from paladin.importers.pipeline import import_tool
@@ -305,8 +393,16 @@ def create_app(settings: Settings) -> FastAPI:
         campaign = _campaign(cid)
         prof = profiles.get(conn, pid)
         source_fields = _profile_source_fields(prof)
-        return render(request, "profile.html", campaign=campaign, prof=prof, keys=MAPPABLE_KEYS, transforms=TRANSFORMS,
-                      source_fields=source_fields, flash=_pop_flash(conn, cid))
+        return render(
+            request,
+            "profile.html",
+            campaign=campaign,
+            prof=prof,
+            keys=MAPPABLE_KEYS,
+            transforms=TRANSFORMS,
+            source_fields=source_fields,
+            flash=_pop_flash(conn, cid),
+        )
 
     def _profile_source_fields(prof: dict) -> list[str]:
         fields = [spec["source"] for spec in prof["mapping"].get("fields", {}).values()]
@@ -344,10 +440,15 @@ def create_app(settings: Settings) -> FastAPI:
         mode = "final" if form.get("mode") == "final" else "working_copy"
         result = export_workbook(settings, conn, cid, mode=mode)
         if result.status != "verified":
-            _flash(conn, cid, f"Export non effectué ({result.status}) : {result.error}", "error", [f"→ {result.action}"])
+            _flash(
+                conn, cid, f"Export non effectué ({result.status}) : {result.error}", "error", [f"→ {result.action}"]
+            )
         else:
             s = result.summary
-            details = [f"{s['cells_written']} cellule(s) écrite(s), {s['findings_up_to_date']} décision(s) à jour dans l'Excel."]
+            details = [
+                f"{s['cells_written']} cellule(s) écrite(s), {s['findings_up_to_date']} décision(s) à jour dans"
+                " l'Excel."
+            ]
             if s["blocked"]:
                 details += [f"BLOQUÉ {b['sheet']} {b['source_id']} : {b['reason']}" for b in s["blocked"]]
             if s["without_target"]:
@@ -372,8 +473,10 @@ def create_app(settings: Settings) -> FastAPI:
             if path is None:
                 _flash(conn, cid, "Fichier introuvable dans les dépôts autorisés.", "warn")
             else:
-                args = [a.replace("{path}", str(path)).replace("{line}", str(row["line_number"] or 1))
-                        for a in shlex.split(command, posix=True)]
+                args = [
+                    a.replace("{path}", str(path)).replace("{line}", str(row["line_number"] or 1))
+                    for a in shlex.split(command, posix=True)
+                ]
                 subprocess.Popen(args)  # noqa: S603 — commande configurée par l'utilisateur, sans shell
         return RedirectResponse(f"/c/{cid}/f/{fid}?{urlencode({'view': 'all'})}", status_code=303)
 

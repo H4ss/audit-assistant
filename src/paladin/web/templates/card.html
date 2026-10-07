@@ -13,7 +13,8 @@
   {% if f.current_decision_id %}<span class="badge {{ 'ok' if f.export_state == 'exported' else ('bad' if f.export_state == 'stale' else 'warn') }}">{{ EXPORT_LABELS[f.export_state] }}</span>{% endif %}
 </div>
 
-<section class="panel finding-head">
+<div class="flash" id="new-proposal" hidden>Une nouvelle proposition est arrivée pour ce finding. <a href="">Afficher</a> (votre saisie en cours est conservée en brouillon).</div>
+<section class="panel finding-head" id="finding-head" data-seq="{{ a.seq if a else 0 }}">
   <div class="row wrap">
     <span class="badge tool">{{ c.tool }}</span>
     <code class="sid">{{ f.source_id }}</code>

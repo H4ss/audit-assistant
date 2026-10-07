@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import os
 import socket
 import sys
 from pathlib import Path
@@ -26,10 +28,8 @@ LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 def _configure_stdio() -> None:
     # Consoles Windows en cp1252 : éviter les UnicodeEncodeError sur les accents.
     for stream in (sys.stdout, sys.stderr):
-        try:
+        with contextlib.suppress(AttributeError, ValueError):
             stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
-        except (AttributeError, ValueError):
-            pass
 
 
 def _home_arg(args: argparse.Namespace, demo: bool = False) -> Path:
@@ -77,9 +77,8 @@ def cmd_demo(args: argparse.Namespace) -> int:
         print(f"Démo {state} — données FICTIVES, propositions simulées (aucune connexion GLM).")
         if result.created:
             from paladin import store
-            from paladin.importers.pipeline import import_tool
-
             from paladin.demo import add_simulated_proposals
+            from paladin.importers.pipeline import import_tool
 
             for tool in store.list_tools(conn, result.campaign_id):
                 print_import_report(import_tool(settings, conn, result.campaign_id, tool["label"]))
@@ -89,7 +88,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
         conn.close()
     print(f"Espace de démo : {home}")
     print(f"Classeur cible : {result.workbook}")
-    print(f"Lancer l'interface : python -m paladin serve --home \"{home}\"")
+    print(f'Lancer l\'interface : python -m paladin serve --home "{home}"')
     return 0
 
 
@@ -122,7 +121,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
             home = demo_home
     _guard_home(home)
     if not (home / "paladin.toml").exists():
-        print(f"Espace absent : {home}\n→ Lancer `python -m paladin init` ou `python -m paladin demo`.", file=sys.stderr)
+        print(
+            f"Espace absent : {home}\n→ Lancer `python -m paladin init` ou `python -m paladin demo`.", file=sys.stderr
+        )
         return 2
     settings = load_settings(home)
     host = args.host or settings.host or DEFAULT_HOST
@@ -145,7 +146,15 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
     print("Arrêter : Ctrl+C dans cette fenêtre.")
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    from paladin.agent.runner import server_file
+
+    marker = server_file(settings)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps({"url": url.rstrip("/"), "pid": os.getpid()}), encoding="utf-8")
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="warning")
+    finally:
+        marker.unlink(missing_ok=True)
     return 0
 
 
@@ -164,8 +173,9 @@ def cmd_start(args: argparse.Namespace) -> int:
             print()
         target = demo_home
         print("Espace de DÉMO (données fictives). Pour une vraie campagne : voir docs/GUIDE.md.")
-    return cmd_serve(argparse.Namespace(home=str(target), host=None, port=args.port, demo=False,
-                                        browser=not args.no_browser))
+    return cmd_serve(
+        argparse.Namespace(home=str(target), host=None, port=args.port, demo=False, browser=not args.no_browser)
+    )
 
 
 def cmd_campaign(args: argparse.Namespace) -> int:
@@ -187,6 +197,79 @@ def cmd_campaign(args: argparse.Namespace) -> int:
     print(f"Campagne « {cid} » créée dans {home}.")
     print("Suite : python -m paladin start   (puis « Importer » dans l'interface)")
     return 0
+
+
+def cmd_agent(args: argparse.Namespace) -> int:
+    """Agent OpenCode : préparer l'espace, mettre en file, exécuter, état."""
+    from paladin.agent import jobs, workspace
+
+    settings, conn = _open(args)
+    try:
+        if args.action == "setup":
+            files = workspace.setup(settings, args.model)
+            print(f"Espace OpenCode de Paladin : {workspace.workspace_dir(settings)}")
+            print("Votre configuration OpenCode globale n'est pas modifiée.")
+            for f in files:
+                print(f"  {f.action:10} {f.path}")
+            print(f"Version des instructions : {workspace.skill_version()}")
+            print("Usage interactif : ouvrir OpenCode dans ce dossier, choisir l'agent « paladin-analyst ».")
+            return 0
+        if args.action == "probe":
+            from paladin.agent.runner import AgentRunError, probe_agent
+
+            try:
+                res = probe_agent(settings, args.model)
+            except AgentRunError as exc:
+                print(f"Sondage impossible : {exc}\n→ {exc.action}")
+                return 2
+            print(f"Outils appelés par l'agent : {res.tools_used or 'aucun'}")
+            print(f"Réponse du modèle : {res.model_text[:400] or '(aucune)'}")
+            print("Ce sondage montre qu'aucun outil interdit n'a été exécuté ; il complète, sans le remplacer,")
+            print("le contrôle de configuration (agent restreint à paladin_*, Code Mode désactivé).")
+            if res.ok:
+                print("OK : aucun outil hors paladin_* n'a été exécuté (shell, fichiers, réseau, execute).")
+            else:
+                print(
+                    f"ÉCHEC : outils interdits exécutés : {res.forbidden} — ne pas utiliser l'agent ;"
+                    f" journal : {res.log}"
+                )
+            print(f"Coût : {res.cost_usd or 0:.4f} $")
+            return 0 if res.ok else 1
+        if args.action == "enqueue":
+            print(f"{jobs.enqueue_analysis(conn, args.campaign)} finding(s) mis en file.")
+            return 0
+        if args.action == "status":
+            st = jobs.status(conn, args.campaign)
+            print(
+                f"{st['label']} — en attente {st['pending']}, en cours {st['claimed']}, analysés {st['done']},"
+                f" erreurs {st['error']}, coût mesuré {st['cost_usd']:.4f} $"
+            )
+            return 0
+        from paladin.agent.runner import AgentRunError, run_agent
+
+        if args.enqueue:
+            print(f"{jobs.enqueue_analysis(conn, args.campaign)} finding(s) mis en file.")
+        budget = args.budget if args.budget is not None else float(settings.agent.get("budget_usd", 1.5))
+        try:
+            report = run_agent(
+                settings,
+                conn,
+                args.campaign,
+                max_jobs=args.max_jobs,
+                budget_usd=budget,
+                model=args.model,
+                job_timeout=args.timeout,
+            )
+        except AgentRunError as exc:
+            print(f"Agent non lancé : {exc}\n→ {exc.action}")
+            return 2
+        done = sum(1 for o in report.outcomes if o.status == "proposition reçue")
+        print(f"\nTerminé : {done} proposition(s) reçue(s) sur {len(report.outcomes)} job(s).")
+        print(f"Dépense mesurée : {report.spent_usd:.4f} $ (source : {report.cost_source}), plafond {budget:.2f} $.")
+        print(f"Arrêt : {report.stopped}")
+        return 0
+    finally:
+        conn.close()
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -234,7 +317,10 @@ def _open(args: argparse.Namespace, demo: bool = False):
 def print_import_report(report) -> None:
     print(report.summary())
     for src in report.sources:
-        print(f"  · {src.role} ({src.kind}) : {src.records} enregistrement(s), complétude {src.completeness} — {src.profile}")
+        print(
+            f"  · {src.role} ({src.kind}) : {src.records} enregistrement(s), complétude {src.completeness} —"
+            f" {src.profile}"
+        )
         for note in src.notes:
             print(f"      note : {note}")
         for part in src.unrecognized:
@@ -246,8 +332,12 @@ def print_import_report(report) -> None:
     if report.blocked:
         print(f"  ! BLOQUÉ : {report.blocked['message']}\n    → {report.blocked['action']}")
         if "proposal" in report.blocked:
-            print_proposal(report.blocked["proposal"], report.blocked.get("basis", {}),
-                           report.blocked.get("unmapped", []), report.blocked.get("missing", []))
+            print_proposal(
+                report.blocked["proposal"],
+                report.blocked.get("basis", {}),
+                report.blocked.get("unmapped", []),
+                report.blocked.get("missing", []),
+            )
 
 
 def print_proposal(mapping: dict, basis: dict, unmapped: list, missing: list) -> None:
@@ -285,8 +375,13 @@ def cmd_export(args: argparse.Namespace) -> int:
 
     settings, conn = _open(args)
     try:
-        result = export_workbook(settings, conn, args.campaign, mode="final" if args.final else "working_copy",
-                                 destination=Path(args.to).resolve() if args.to else None)
+        result = export_workbook(
+            settings,
+            conn,
+            args.campaign,
+            mode="final" if args.final else "working_copy",
+            destination=Path(args.to).resolve() if args.to else None,
+        )
     finally:
         conn.close()
     if result.status != "verified":
@@ -294,10 +389,15 @@ def cmd_export(args: argparse.Namespace) -> int:
         return 4
     s = result.summary
     print(f"Excel à jour : {result.destination}")
-    print(f"  cellules écrites {s['cells_written']}, lignes ajoutées {s['rows_appended']}, "
-          f"findings à jour {s['findings_up_to_date']}")
-    print(f"  bloqués {len(s['blocked'])}, sans cible {len(s['without_target'])}, "
-          f"lignes Excel non appariées {len(s['unmatched_rows'])}, valeurs humaines conservées {len(s['preserved_human_values'])}")
+    print(
+        f"  cellules écrites {s['cells_written']}, lignes ajoutées {s['rows_appended']}, "
+        f"findings à jour {s['findings_up_to_date']}"
+    )
+    print(
+        f"  bloqués {len(s['blocked'])}, sans cible {len(s['without_target'])}, "
+        f"lignes Excel non appariées {len(s['unmatched_rows'])}, valeurs humaines conservées"
+        f" {len(s['preserved_human_values'])}"
+    )
     for b in s["blocked"]:
         print(f"    BLOQUÉ {b['sheet']} {b['source_id']} : {b['reason']}")
     if s["tools_without_sheet"]:
@@ -328,7 +428,10 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     else:
         print(f"Format non pris en charge : {suffix}. Formats : xlsx, csv, md, sarif.")
         return 2
-    print(f"{path.name} : {len(read.records)} enregistrement(s), {len(read.field_names)} champ(s), complétude {read.completeness.value}")
+    print(
+        f"{path.name} : {len(read.records)} enregistrement(s), {len(read.field_names)} champ(s), complétude"
+        f" {read.completeness.value}"
+    )
     for part in read.unrecognized:
         print(f"  NON RECONNU {part.locator} : {part.reason}")
     prop = propose_mapping(read.field_names, read.records)
@@ -340,7 +443,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 def cmd_profile(args: argparse.Namespace) -> int:
     from paladin.importers import profiles
 
-    settings, conn = _open(args)
+    _settings, conn = _open(args)
     try:
         if args.action == "list":
             for p in profiles.list_profiles(conn, args.campaign):
@@ -404,7 +507,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_import)
     p = add("export", "Exporter les décisions validées vers l'Excel.")
     p.add_argument("--campaign", default="demo")
-    p.add_argument("--final", action="store_true", help="Mettre à jour le classeur cible désigné (sinon copie de travail).")
+    p.add_argument(
+        "--final", action="store_true", help="Mettre à jour le classeur cible désigné (sinon copie de travail)."
+    )
     p.add_argument("--to", help="Destination explicite.")
     p.set_defaults(func=cmd_export)
     p = sub.add_parser("inspect", help="Détecter les champs d'un rapport et proposer un mapping (multi-entrées).")
@@ -412,6 +517,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sheet")
     p.add_argument("--profile", help="Profil MD (heading-kv-v1, table-v1).")
     p.set_defaults(func=cmd_inspect)
+    p = add("agent", "Agent OpenCode : setup, enqueue, run, status.")
+    p.add_argument("action", choices=["setup", "enqueue", "run", "status", "probe"])
+    p.add_argument("--campaign", default="demo")
+    p.add_argument("--model", help="fournisseur/modèle, ex. openrouter/z-ai/glm-5.3")
+    p.add_argument("--max-jobs", type=int, default=3)
+    p.add_argument("--budget", type=float, help="Plafond de dépense en USD pour cette exécution (défaut : 1.5).")
+    p.add_argument("--timeout", type=int, default=900, help="Secondes maximum par job.")
+    p.add_argument(
+        "--enqueue", action="store_true", help="Mettre en file les findings sans proposition avant de lancer."
+    )
+    p.set_defaults(func=cmd_agent)
     p = add("profile", "Profils d'entrée : lister, afficher, valider.")
     p.add_argument("action", choices=["list", "show", "validate"])
     p.add_argument("profile_id", nargs="?")

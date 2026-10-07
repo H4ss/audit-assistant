@@ -20,7 +20,13 @@ def find_validated(conn: sqlite3.Connection, campaign_id: str, sig: str) -> dict
 
 
 def save_proposal(
-    conn: sqlite3.Connection, campaign_id: str, name: str, kind: str, sig: str, mapping: dict[str, Any], proposed_by: str
+    conn: sqlite3.Connection,
+    campaign_id: str,
+    name: str,
+    kind: str,
+    sig: str,
+    mapping: dict[str, Any],
+    proposed_by: str,
 ) -> dict[str, Any]:
     """Enregistre une proposition (idempotent pour une même signature en attente)."""
     existing = conn.execute(
@@ -29,14 +35,31 @@ def save_proposal(
     ).fetchone()
     if existing:
         return _row(existing)  # type: ignore[return-value]
-    version = (conn.execute(
-        "SELECT COALESCE(MAX(version), 0) FROM input_profile WHERE campaign_id = ? AND name = ?", (campaign_id, name)
-    ).fetchone()[0]) + 1
+    version = (
+        (
+            conn.execute(
+                "SELECT COALESCE(MAX(version), 0) FROM input_profile WHERE campaign_id = ? AND name = ?",
+                (campaign_id, name),
+            ).fetchone()[0]
+        )
+        + 1
+    )
     pid = new_id()
     conn.execute(
         "INSERT INTO input_profile (id, campaign_id, name, source_kind, signature, version, mapping_json, status,"
         " proposed_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (pid, campaign_id, name, kind, sig, version, dumps(mapping), SchemaStatus.PROPOSED.value, proposed_by, utcnow()),
+        (
+            pid,
+            campaign_id,
+            name,
+            kind,
+            sig,
+            version,
+            dumps(mapping),
+            SchemaStatus.PROPOSED.value,
+            proposed_by,
+            utcnow(),
+        ),
     )
     return get(conn, pid)
 
@@ -47,7 +70,8 @@ def validate(conn: sqlite3.Connection, profile_id: str, mapping: dict[str, Any] 
     final = mapping if mapping is not None else prof["mapping"]
     validate_mapping(final)
     conn.execute(
-        "UPDATE input_profile SET status = 'superseded' WHERE campaign_id IS ? AND signature = ? AND status = 'validated'",
+        "UPDATE input_profile SET status = 'superseded' WHERE campaign_id IS ? AND signature = ? AND status ="
+        " 'validated'",
         (prof["campaign_id"], prof["signature"]),
     )
     conn.execute(

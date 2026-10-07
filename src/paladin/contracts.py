@@ -272,11 +272,7 @@ def normalize_cwe(raw: str | int) -> str | None:
 def parse_cwe_list(raw: str | list[Any] | None) -> list[str]:
     if raw is None:
         return []
-    items: list[Any]
-    if isinstance(raw, list):
-        items = raw
-    else:
-        items = str(raw).replace(",", ";").split(";")
+    items: list[Any] = raw if isinstance(raw, list) else str(raw).replace(",", ";").split(";")
     out: list[str] = []
     for item in items:
         n = normalize_cwe(item) if str(item).strip() else None
@@ -419,7 +415,7 @@ class SheetSchemaProposal(BaseModel):
     @field_validator("sheet_name")
     @classmethod
     def _excel_sheet_name(cls, v: str) -> str:
-        forbidden = set('[]:*?/\\')
+        forbidden = set("[]:*?/\\")
         if any(ch in forbidden for ch in v) or v.startswith("'") or v.endswith("'"):
             raise ValueError("Nom d'onglet Excel invalide")
         if v.strip().lower() == "history":

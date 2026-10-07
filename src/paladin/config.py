@@ -20,6 +20,7 @@ Disposition d'un espace :
 
 from __future__ import annotations
 
+import contextlib
 import os
 import secrets
 import sys
@@ -60,8 +61,8 @@ port = {port}
 [agent]
 # Client d'analyse : OpenCode. Le modèle est une configuration, pas une dépendance.
 client = "opencode"
-model_requested = "glm-latest"
-provider = ""            # ex. "openrouter" ; renseigné par `paladin doctor`
+model = "openrouter/z-ai/glm-5.3"   # fournisseur/modèle ; version épinglée (l'alias glm-latest masque la version)
+budget_usd = 1.5         # plafond par exécution de `paladin agent run`
 lease_seconds = 900
 
 [fortify]
@@ -116,10 +117,8 @@ def _read_or_create_token(path: Path) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(32)
     path.write_text(token, encoding="utf-8")
-    try:
+    with contextlib.suppress(OSError):  # Windows : ACL héritées du profil utilisateur
         path.chmod(0o600)
-    except OSError:  # Windows : ACL héritées du profil utilisateur
-        pass
     return token
 
 

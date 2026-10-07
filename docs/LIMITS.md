@@ -3,7 +3,14 @@
 Mise à jour à chaque palier. Le README n'annonce que ce qui est vérifié.
 
 - **Fortify réel : non vérifié.** Les captures de `fixtures/demo/fortify` ont une forme *inspirée* d'une API SSC mais sont fictives. Les noms de champs (`issueName`, `kingdom`, `friority`...) et leur association aux colonnes `Category` / `Fortify Category` sont des hypothèses déclarées dans `campaign.json`, à confirmer par le diagnostic sur le PC de travail.
-- **GLM / OpenCode réel : non vérifié** (arrive au palier P3). OpenCode v2.0.22 est installé sur le poste de développement, sans fournisseur configuré.
+- **OpenCode / GLM réel : vérifié sur le poste de développement** (Linux, OpenCode v2.0.22, `openrouter/z-ai/glm-5.3`). **Non vérifié** sur le PC de travail (Windows, fournisseur de l'entreprise) : à valider avec `tests/test_real_agent.py`.
+- **OpenCode V2 : spécificités vérifiées** :
+  - les outils personnalisés passent par un plugin V2 (`.opencode/plugins/`) ; le format V1 (`.opencode/tools/`) est ignoré en silence ;
+  - le projet est localisé via `$PWD` ;
+  - `opencode run` attend la fin de l'entrée standard ;
+  - le « Code Mode » (outil `execute`) offre au programme un `fetch` réseau que les permissions ne bloquent pas. Paladin expose donc ses outils hors Code Mode (`codemode: false`) et l'agent n'a pas `execute` : il ne dispose que des six outils `paladin_*`, ce qui est vérifié par sondage. Toute mise à jour d'OpenCode impose de refaire ce sondage.
+- **Version résolue du modèle** : OpenCode ne la renvoie pas. Elle est enregistrée comme `unknown` ; seul le modèle demandé est tracé.
+- **Coût** : mesuré comme le maximum entre l'usage de la clé OpenRouter (qui peut avoir quelques secondes de retard) et le coût rapporté par OpenCode. Avec un autre fournisseur, seule la mesure d'OpenCode est disponible.
 - « openclaude » est traité comme OpenCode ; aucune compatibilité avec un autre client n'est revendiquée.
 - Classeurs pris en charge : XLSX standard. Macros (`.xlsm`), objets embarqués, signatures et fonctions particulières nécessitent une qualification séparée.
 - ToolB : dans la démo, l'inventaire Excel du concurrent est l'onglet `ToolB` du classeur cible (rôle configurable par source).

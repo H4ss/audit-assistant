@@ -37,19 +37,40 @@ from paladin.importers.markdown import read_markdown
 from paladin.importers.records import RawRecord, SourceRead
 from paladin.importers.sarif import SARIF_MAPPING, read_sarif
 from paladin.importers.tabular import read_csv, read_excel
-from paladin.util import dumps, fingerprint, new_id, sha256_file, utcnow
+from paladin.util import dumps, file_stamp, fingerprint, new_id, sha256_file, utcnow
 
 # Champs comparés entre inventaire et détails pour signaler les divergences.
-COMPARED_FIELDS = ("category", "primary_rule_id", "full_filename", "line_number", "criticality_raw", "cwe_ids",
-                   "application_name", "version_name")
-FINDING_FIELDS = ("application_name", "version_name", "version_source_id", "category", "fortify_category",
-                  "primary_rule_id", "analyzer_type", "primary_location", "line_number", "full_filename",
-                  "function_name", "criticality_raw", "cwe_ids", "source_comments")
+COMPARED_FIELDS = (
+    "category",
+    "primary_rule_id",
+    "full_filename",
+    "line_number",
+    "criticality_raw",
+    "cwe_ids",
+    "application_name",
+    "version_name",
+)
+FINDING_FIELDS = (
+    "application_name",
+    "version_name",
+    "version_source_id",
+    "category",
+    "fortify_category",
+    "primary_rule_id",
+    "analyzer_type",
+    "primary_location",
+    "line_number",
+    "full_filename",
+    "function_name",
+    "criticality_raw",
+    "cwe_ids",
+    "source_comments",
+)
 
 ANALYST_HEADERS = {"analysis result", "analysis result comment"}
 
 
-class ImportBlocked(RuntimeError):
+class ImportBlockedError(RuntimeError):
     def __init__(self, message: str, action: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.action = action
@@ -183,7 +204,7 @@ def _resolve_mapping(
     saved = profiles.save_proposal(
         conn, campaign_id, f"{tool}-{read.kind}", read.kind, sig, proposal.as_mapping(), "heuristic"
     )
-    raise ImportBlocked(
+    raise ImportBlockedError(
         f"Aucun profil validé pour cette source {read.kind} de {tool}.",
         f"Vérifier puis valider la proposition : python -m paladin profile show {saved['id']}",
         {
@@ -206,7 +227,9 @@ def _read_source(path: Path, spec: dict[str, Any]) -> SourceRead:
         return read_markdown(path, spec["profile"], spec.get("options") or {})
     if kind == "sarif":
         return read_sarif(path)
-    raise ImportBlocked(f"Type de source inconnu : {kind}", "Types pris en charge : excel, csv, md, sarif, fortify_fixture.")
+    raise ImportBlockedError(
+        f"Type de source inconnu : {kind}", "Types pris en charge : excel, csv, md, sarif, fortify_fixture."
+    )
 
 
 def _start_run(conn, campaign_id, tool_id, kind, source_file_id, profile, scope) -> str:
@@ -241,7 +264,7 @@ def resolve_repo(path: str | None, repos: list[dict[str, Any]]) -> tuple[str | N
         for root in repo["scanner_roots"]:
             r = root.replace("\\", "/")
             if p.startswith(r):
-                return repo["id"], repo["name"], p[len(r):].lstrip("/")
+                return repo["id"], repo["name"], p[len(r) :].lstrip("/")
     q = p
     while q.startswith("./"):
         q = q[2:]
@@ -286,7 +309,9 @@ def _comparable(value: Any) -> Any:
     return value
 
 
-def _merge(inv: NormalizedFinding, det: NormalizedFinding, priority: dict[str, str]) -> tuple[NormalizedFinding, list[dict[str, Any]]]:
+def _merge(
+    inv: NormalizedFinding, det: NormalizedFinding, priority: dict[str, str]
+) -> tuple[NormalizedFinding, list[dict[str, Any]]]:
     data = inv.model_dump()
     d = det.model_dump()
     divergences = []
@@ -298,10 +323,15 @@ def _merge(inv: NormalizedFinding, det: NormalizedFinding, priority: dict[str, s
             data[key] = dval
         elif key in COMPARED_FIELDS and dval not in (None, [], "") and _comparable(ival) != _comparable(dval):
             chosen = priority.get(key)
-            divergences.append({
-                "field": key, "inventory": ival, "details": dval,
-                "selected": chosen, "reason": f"priorité validée : {chosen}" if chosen else "à résoudre",
-            })
+            divergences.append(
+                {
+                    "field": key,
+                    "inventory": ival,
+                    "details": dval,
+                    "selected": chosen,
+                    "reason": f"priorité validée : {chosen}" if chosen else "à résoudre",
+                }
+            )
             if chosen == "details":
                 data[key] = dval
     data["extra"] = {**d.get("extra", {}), **inv.extra}
@@ -338,20 +368,40 @@ def reconcile(
             di = cands[0]
             used_details.add(di)
             merged, divs = _merge(inv, details[di], priority)
-            out.append(_Merged(merged, [("inventory", inv, ii), ("details", details[di], di)], MatchState.MATCHED, detail, divs))
+            out.append(
+                _Merged(
+                    merged, [("inventory", inv, ii), ("details", details[di], di)], MatchState.MATCHED, detail, divs
+                )
+            )
         elif len(cands) > 1:
-            out.append(_Merged(inv, [("inventory", inv, ii)], MatchState.AMBIGUOUS,
-                               f"{len(cands)} détails candidats : confirmation requise"))
+            out.append(
+                _Merged(
+                    inv,
+                    [("inventory", inv, ii)],
+                    MatchState.AMBIGUOUS,
+                    f"{len(cands)} détails candidats : confirmation requise",
+                )
+            )
         else:
             out.append(_Merged(inv, [("inventory", inv, ii)], MatchState.INVENTORY_ONLY, "aucun détail MD"))
     for di, det in enumerate(details):
         if di in used_details:
             continue
-        ambiguous_with = any(m.match_state == MatchState.AMBIGUOUS and det_by_id.get(m.primary.source_id or "") and
-                             di in det_by_id[m.primary.source_id or ""] for m in out)
+        ambiguous_with = any(
+            m.match_state == MatchState.AMBIGUOUS
+            and det_by_id.get(m.primary.source_id or "")
+            and di in det_by_id[m.primary.source_id or ""]
+            for m in out
+        )
         state = MatchState.AMBIGUOUS if ambiguous_with else MatchState.DETAILS_ONLY
-        out.append(_Merged(det, [("details", det, di)], state,
-                           "candidat ambigu" if ambiguous_with else "MD sans ligne Excel : proposition de nouvelle ligne"))
+        out.append(
+            _Merged(
+                det,
+                [("details", det, di)],
+                state,
+                "candidat ambigu" if ambiguous_with else "MD sans ligne Excel : proposition de nouvelle ligne",
+            )
+        )
     return out
 
 
@@ -410,13 +460,26 @@ def _insert_source_record(conn, run_id, source_file_id, finding_id, role, f: Nor
     conn.execute(
         "INSERT INTO source_record (id, import_run_id, source_file_id, finding_id, role, locator, record_hash,"
         " payload_json, match_state, match_detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (rid, run_id, source_file_id, finding_id, role, f.locator, fingerprint(f.raw), dumps(f.model_dump()),
-         None if merged is None else merged.match_state.value, None if merged is None else merged.match_detail, utcnow()),
+        (
+            rid,
+            run_id,
+            source_file_id,
+            finding_id,
+            role,
+            f.locator,
+            fingerprint(f.raw),
+            dumps(f.model_dump()),
+            None if merged is None else merged.match_state.value,
+            None if merged is None else merged.match_detail,
+            utcnow(),
+        ),
     )
     return rid
 
 
-def _insert_field_values(conn, finding_id: str, record_id: str, f: NormalizedFinding, selected_fields: set[str], reason: str):
+def _insert_field_values(
+    conn, finding_id: str, record_id: str, f: NormalizedFinding, selected_fields: set[str], reason: str
+):
     now = utcnow()
     for key in FINDING_FIELDS:
         val = getattr(f, key)
@@ -447,7 +510,7 @@ def _upsert(
     scope_key = _scope_key(tool["label"], f, scope)
     content_fp = _content_fingerprint(merged)
     primary_role = merged.members[0][0]
-    run_id, source_file_id = runs[primary_role]
+    run_id, _source_file_id = runs[primary_role]
 
     key = (scope_key, source_id)
     if key in seen:
@@ -481,20 +544,56 @@ def _upsert(
         "application_name": f.application_name or scope.get("application_name"),
         "version_name": f.version_name or scope.get("version_name"),
         "version_source_id": f.version_source_id or (str(scope["version_id"]) if scope.get("version_id") else None),
-        "category": f.category, "fortify_category": f.fortify_category, "primary_rule_id": f.primary_rule_id,
-        "analyzer_type": f.analyzer_type, "primary_location": f.primary_location, "line_number": f.line_number,
-        "full_filename": f.full_filename, "normalized_path": norm, "function_name": f.function_name,
-        "criticality_raw": f.criticality_raw, "cwe_ids_json": dumps(f.cwe_ids), "source_comments": f.source_comments,
-        "details_json": dumps(_details_json(f, merged)), "repo_id": repo_id, "commit_sha": commit_sha,
-        "family": cls.family, "family_basis": cls.basis, "analysis_route": cls.route,
+        "category": f.category,
+        "fortify_category": f.fortify_category,
+        "primary_rule_id": f.primary_rule_id,
+        "analyzer_type": f.analyzer_type,
+        "primary_location": f.primary_location,
+        "line_number": f.line_number,
+        "full_filename": f.full_filename,
+        "normalized_path": norm,
+        "function_name": f.function_name,
+        "criticality_raw": f.criticality_raw,
+        "cwe_ids_json": dumps(f.cwe_ids),
+        "source_comments": f.source_comments,
+        "details_json": dumps(_details_json(f, merged)),
+        "repo_id": repo_id,
+        "commit_sha": commit_sha,
+        "family": cls.family,
+        "family_basis": cls.basis,
+        "analysis_route": cls.route,
         "divergent_fields_json": dumps(divergent),
     }
     if row is None:
         fid = new_id()
-        cols = ["id", "campaign_id", "tool_id", "scope_key", "source_id", "source_id_kind", "fingerprint",
-                "first_import_id", "last_import_id", "created_at", "updated_at", *values]
-        params = [fid, campaign_id, tool["id"], scope_key, source_id, id_kind, content_fp, run_id, run_id, now, now,
-                  *values.values()]
+        cols = [
+            "id",
+            "campaign_id",
+            "tool_id",
+            "scope_key",
+            "source_id",
+            "source_id_kind",
+            "fingerprint",
+            "first_import_id",
+            "last_import_id",
+            "created_at",
+            "updated_at",
+            *values,
+        ]
+        params = [
+            fid,
+            campaign_id,
+            tool["id"],
+            scope_key,
+            source_id,
+            id_kind,
+            content_fp,
+            run_id,
+            run_id,
+            now,
+            now,
+            *values.values(),
+        ]
         conn.execute(f"INSERT INTO finding ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", params)
         report.new += 1
         changed = True
@@ -544,7 +643,9 @@ def _tool_spec(campaign: dict[str, Any], label: str) -> dict[str, Any]:
     for t in campaign["config"].get("tools", []):
         if t["label"] == label:
             return t
-    raise ImportBlocked(f"Outil {label!r} absent de la configuration de campagne.", "Ajouter l'outil à la campagne.")
+    raise ImportBlockedError(
+        f"Outil {label!r} absent de la configuration de campagne.", "Ajouter l'outil à la campagne."
+    )
 
 
 @dataclass
@@ -585,14 +686,25 @@ def import_tool(
                 continue
             path = resolve_source_path(settings, campaign, src)
             if not path.exists():
-                raise ImportBlocked(f"Fichier source introuvable : {path}", "Vérifier le chemin dans la configuration.")
+                raise ImportBlockedError(
+                    f"Fichier source introuvable : {path}", "Vérifier le chemin dans la configuration."
+                )
             read = _read_source(path, src)
             mapping, basis = _resolve_mapping(conn, campaign_id, tool_label, src, read)
             findings = [apply_mapping(r, mapping, tool_label) for r in read.records]
-            sr = SourceReport(src["role"], read.kind, str(path), len(findings), read.completeness.value,
-                              [vars(u) for u in read.unrecognized], [vars(u) for u in read.ignored], read.notes, basis)
+            sr = SourceReport(
+                src["role"],
+                read.kind,
+                str(path),
+                len(findings),
+                read.completeness.value,
+                [vars(u) for u in read.unrecognized],
+                [vars(u) for u in read.ignored],
+                read.notes,
+                basis,
+            )
             prepared.append(_Prepared(src, read, findings, sr, path))
-    except (ImportBlocked, fty.VersionSelectionError) as exc:
+    except (ImportBlockedError, fty.VersionSelectionError) as exc:
         report.blocked = {"message": str(exc), "action": exc.action, **getattr(exc, "details", {})}
         return report
 
@@ -601,8 +713,15 @@ def import_tool(
         for pr in prepared:
             role = pr.spec["role"]
             sf_id = _register_file(conn, settings, campaign_id, tool["id"], role, pr.path) if pr.path else None
-            run_id = _start_run(conn, campaign_id, tool["id"], pr.spec["kind"], sf_id, pr.report.profile,
-                                {**pr.read.scope, **(pr.spec.get("scope") or {})})
+            run_id = _start_run(
+                conn,
+                campaign_id,
+                tool["id"],
+                pr.spec["kind"],
+                sf_id,
+                pr.report.profile,
+                {**pr.read.scope, **(pr.spec.get("scope") or {})},
+            )
             pr.report.import_run_id = run_id
             report.sources.append(pr.report)
             loaded[role] = _Loaded(pr.spec, pr.read, pr.findings, pr.report, sf_id, run_id)
@@ -614,8 +733,13 @@ def _ingest(conn, campaign_id, tool, spec, loaded: dict[str, _Loaded], repos, re
     priority = spec.get("field_priority", {})
     scope: dict[str, Any] = {}
     for lo in loaded.values():
-        scope.update({k: v for k, v in lo.read.scope.items() if k in ("application_name", "version_name",
-                                                                         "version_id", "application_id")})
+        scope.update(
+            {
+                k: v
+                for k, v in lo.read.scope.items()
+                if k in ("application_name", "version_name", "version_id", "application_id")
+            }
+        )
     commit_sha = (spec.get("fortify") or {}).get("scanned_commit") or spec.get("scanned_commit")
     runs = {role: (lo.import_run_id, lo.source_file_id) for role, lo in loaded.items()}
 
@@ -630,7 +754,9 @@ def _ingest(conn, campaign_id, tool, spec, loaded: dict[str, _Loaded], repos, re
     else:
         merged_list = []
         for role, lo in loaded.items():
-            merged_list += [_Merged(f, [(role, f, i)], MatchState.MATCHED, "source unique") for i, f in enumerate(lo.findings)]
+            merged_list += [
+                _Merged(f, [(role, f, i)], MatchState.MATCHED, "source unique") for i, f in enumerate(lo.findings)
+            ]
 
     seen: dict[tuple[str, str], str] = {}
     for m in merged_list:
@@ -646,24 +772,33 @@ def _ingest(conn, campaign_id, tool, spec, loaded: dict[str, _Loaded], repos, re
     for lo in loaded.values():
         status = "done" if lo.read.completeness == Completeness.COMPLETE else "partial"
         imported = sum(1 for m in merged_list for role, _, _ in m.members if role == lo.spec["role"])
-        _finish_run(conn, lo.import_run_id, lo.read, imported, status, {
-            "unrecognized": [vars(u) for u in lo.read.unrecognized],
-            "ignored": [vars(u) for u in lo.read.ignored],
-            "notes": lo.read.notes,
-            "tool_summary": report.summary(),
-        })
+        _finish_run(
+            conn,
+            lo.import_run_id,
+            lo.read,
+            imported,
+            status,
+            {
+                "unrecognized": [vars(u) for u in lo.read.unrecognized],
+                "ignored": [vars(u) for u in lo.read.ignored],
+                "notes": lo.read.notes,
+                "tool_summary": report.summary(),
+            },
+        )
 
 
 def _prepare_fortify(settings, campaign, tool, spec, src, source, resume, report) -> _Prepared:
     cfg = spec.get("fortify") or {}
     if source is None:
         if src["kind"] != "fortify_fixture":
-            raise ImportBlocked(
+            raise ImportBlockedError(
                 "Connecteur Fortify réel non disponible : aucun endpoint n'a été vérifié sur l'instance.",
                 "Exécuter le diagnostic sur le PC de travail (palier P4 / étape B).",
             )
         source = fty.FixtureFortifySource(resolve_source_path(settings, campaign, src))
-    choice = fty.select_version(source, cfg["application_name"], cfg.get("version_name", "release"), cfg.get("version_id"))
+    choice = fty.select_version(
+        source, cfg["application_name"], cfg.get("version_name", "release"), cfg.get("version_id")
+    )
     captures = settings.campaign_dir(campaign["id"]) / "captures"
     resume_manifest = None
     if resume:
@@ -672,25 +807,50 @@ def _prepare_fortify(settings, campaign, tool, spec, src, source, resume, report
             m = json.loads(latest[-1].read_text(encoding="utf-8"))
             if m.get("completeness") != "complete":
                 resume_manifest = m
-    capture_dir = captures / f"fortify-{utcnow()[:19].replace(':', '').replace('-', '')}-{new_id()[:6]}"
-    result = fty.collect(source, choice, capture_dir, page_size=int(cfg.get("page_size", 8)),
-                         filters=cfg.get("filters"), resume_manifest=resume_manifest)
+    capture_dir = captures / f"fortify-{file_stamp()}-{new_id()[:6]}"
+    result = fty.collect(
+        source,
+        choice,
+        capture_dir,
+        page_size=int(cfg.get("page_size", 8)),
+        filters=cfg.get("filters"),
+        resume_manifest=resume_manifest,
+    )
     read = result.read
     mapping = _fortify_mapping(cfg["field_map"])
     validate_mapping(mapping)
     findings = []
     for rec in read.records:
-        nf = apply_mapping(RawRecord(fields={k: v for k, v in rec.fields.items() if k != "_details"},
-                                     locator=rec.locator), mapping, tool["label"])
+        nf = apply_mapping(
+            RawRecord(fields={k: v for k, v in rec.fields.items() if k != "_details"}, locator=rec.locator),
+            mapping,
+            tool["label"],
+        )
         extra = fty.details_to_fields(rec.fields)
         nf = nf.model_copy(update={k: v for k, v in extra.items() if v is not None and k != "source_comments"})
         if extra["source_comments"]:
-            nf = nf.model_copy(update={"source_comments": "\n".join(filter(None, [nf.source_comments, extra["source_comments"]]))})
-        nf = nf.model_copy(update={"application_name": choice.application_name, "version_name": choice.version_name,
-                                   "version_source_id": str(choice.version_id)})
+            nf = nf.model_copy(
+                update={"source_comments": "\n".join(filter(None, [nf.source_comments, extra["source_comments"]]))}
+            )
+        nf = nf.model_copy(
+            update={
+                "application_name": choice.application_name,
+                "version_name": choice.version_name,
+                "version_source_id": str(choice.version_id),
+            }
+        )
         findings.append(nf)
-    sr = SourceReport(src["role"], "fortify", str(result.manifest_path), len(findings), read.completeness.value,
-                      [], [], read.notes, "field_map déclaré (à vérifier sur l'instance réelle)")
+    sr = SourceReport(
+        src["role"],
+        "fortify",
+        str(result.manifest_path),
+        len(findings),
+        read.completeness.value,
+        [],
+        [],
+        read.notes,
+        "field_map déclaré (à vérifier sur l'instance réelle)",
+    )
     if result.error:
         report.error = {"message": str(result.error), "action": result.error.action}
     return _Prepared(src, read, findings, sr, None)

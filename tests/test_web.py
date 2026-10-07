@@ -4,10 +4,10 @@ import re
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.conftest import finding_by_source
 
 from paladin.demo import add_simulated_proposals
 from paladin.web.app import create_app
-from tests.conftest import finding_by_source
 
 F1 = "FFFFFFFFFFFFFFFFFFFFFFFF00900001"
 
@@ -53,9 +53,15 @@ def test_post_requires_ui_token_and_local_origin(web):
 
 def test_agent_token_cannot_decide(web, demo):
     f = finding_by_source(web["conn"], F1)
-    r = web["client"].post(f"/c/demo/f/{f['id']}/decide", data={
-        "token": demo["settings"].agent_token(), "revision": str(f["revision"]), "op": "decide",
-        "verdict": "TRUE_POSITIVE"})
+    r = web["client"].post(
+        f"/c/demo/f/{f['id']}/decide",
+        data={
+            "token": demo["settings"].agent_token(),
+            "revision": str(f["revision"]),
+            "op": "decide",
+            "verdict": "TRUE_POSITIVE",
+        },
+    )
     assert r.status_code == 403
 
 
@@ -87,8 +93,14 @@ def test_comment_only_correction_is_a_correction(web):
 
 def test_discussion_with_not_an_issue(web):
     sid = "FFFFFFFFFFFFFFFFFFFFFFFF00900007"
-    _decide(web, sid, verdict="NOT_AN_ISSUE", comment="security appetite to be discussed", discussion="1",
-            discussion_reason="secret de test")
+    _decide(
+        web,
+        sid,
+        verdict="NOT_AN_ISSUE",
+        comment="security appetite to be discussed",
+        discussion="1",
+        discussion_reason="secret de test",
+    )
     ev = _events(web, sid)[-1]
     assert ev["verdict"] == "NOT_AN_ISSUE" and ev["comment"] == "security appetite to be discussed"
     assert ev["discussion_required"] == 1 and ev["discussion_reason"] == "secret de test"
@@ -96,8 +108,13 @@ def test_discussion_with_not_an_issue(web):
 
 def test_double_submit_records_one_decision(web):
     f = finding_by_source(web["conn"], F1)
-    data = {"token": web["token"], "revision": str(f["revision"]), "op": "decide", "verdict": "TRUE_POSITIVE",
-            "view": "all"}
+    data = {
+        "token": web["token"],
+        "revision": str(f["revision"]),
+        "op": "decide",
+        "verdict": "TRUE_POSITIVE",
+        "view": "all",
+    }
     web["client"].post(f"/c/demo/f/{f['id']}/decide", data=data, follow_redirects=False)
     r = web["client"].post(f"/c/demo/f/{f['id']}/decide", data=data, follow_redirects=False)
     assert len(_events(web, F1)) == 1
@@ -114,9 +131,17 @@ def test_missing_verdict_is_refused_with_guidance(web):
 def test_investigate_and_undo(web):
     sid = "FFFFFFFFFFFFFFFFFFFFFFFF00900006"
     f = finding_by_source(web["conn"], sid)
-    web["client"].post(f"/c/demo/f/{f['id']}/decide", data={
-        "token": web["token"], "revision": str(f["revision"]), "op": "investigate", "view": "all",
-        "question": "safe_join et liens symboliques ?", "reason": "protection hors dépôt"})
+    web["client"].post(
+        f"/c/demo/f/{f['id']}/decide",
+        data={
+            "token": web["token"],
+            "revision": str(f["revision"]),
+            "op": "investigate",
+            "view": "all",
+            "question": "safe_join et liens symboliques ?",
+            "reason": "protection hors dépôt",
+        },
+    )
     assert finding_by_source(web["conn"], sid)["review_state"] == "investigating"
     r = web["client"].post("/c/demo/undo", data={"token": web["token"], "view": "all"}, follow_redirects=False)
     assert r.status_code == 303
@@ -138,8 +163,16 @@ def test_draft_api_requires_token_and_restores(web):
     url = f"/api/c/demo/f/{f['id']}/draft"
     assert web["client"].post(url, json={"comment": "x"}).status_code == 403
     hdr = {"x-paladin-token": web["token"]}
-    assert web["client"].post(url, json={"verdict": "NOT_AN_ISSUE", "comment": "brouillon persistant",
-                                         "revision": f["revision"]}, headers=hdr).status_code == 200
+    assert (
+        web["client"]
+        .post(
+            url,
+            json={"verdict": "NOT_AN_ISSUE", "comment": "brouillon persistant", "revision": f["revision"]},
+            headers=hdr,
+        )
+        .status_code
+        == 200
+    )
     stale = web["client"].post(url, json={"comment": "trop tard", "revision": f["revision"] - 1}, headers=hdr)
     assert stale.status_code == 409
     _, page = _card(web, F1)
@@ -159,10 +192,17 @@ def test_profile_validation_import_and_export_from_ui(web):
     pid = re.search(r"/c/demo/profiles/([0-9a-f]{32})", dash.text).group(1)
     page = c.get(f"/c/demo/profiles/{pid}")
     assert "Location" in page.text and "location_line" in page.text
-    data = {"token": web["token"], "src_source_id": "Ref", "src_category": "Check",
-            "src_full_filename": "Location", "tr_full_filename": "location_path",
-            "src_line_number": "Location", "tr_line_number": "location_line",
-            "src_criticality_raw": "Severity", "src_description": "Details"}
+    data = {
+        "token": web["token"],
+        "src_source_id": "Ref",
+        "src_category": "Check",
+        "src_full_filename": "Location",
+        "tr_full_filename": "location_path",
+        "src_line_number": "Location",
+        "tr_line_number": "location_line",
+        "src_criticality_raw": "Severity",
+        "src_description": "Details",
+    }
     c.post(f"/c/demo/profiles/{pid}/validate", data=data)
     r = c.post("/c/demo/import", data={"token": web["token"], "tool": "ToolC"})
     assert "ToolC : 5 nouveaux" in r.text

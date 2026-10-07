@@ -14,6 +14,11 @@ def utcnow() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
+def file_stamp() -> str:
+    """Horodatage compact UTC utilisable dans un nom de fichier : 20261007T142530."""
+    return utcnow()[:19].replace(":", "").replace("-", "")
+
+
 def new_id() -> str:
     return uuid.uuid4().hex
 

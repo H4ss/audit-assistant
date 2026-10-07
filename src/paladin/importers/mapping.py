@@ -55,23 +55,85 @@ TRANSFORMS = ("text", "int", "cwe_list", "location_path", "location_line", "base
 
 # Synonymes normalisés (minuscules, sans accents ni ponctuation).
 _SYNONYMS: dict[str, tuple[str, ...]] = {
-    "source_id": ("id", "finding id", "issue id", "instance id", "ref", "reference", "identifiant", "key",
-                  "issueinstanceid", "finding", "vuln id", "alert id", "numero"),
+    "source_id": (
+        "id",
+        "finding id",
+        "issue id",
+        "instance id",
+        "ref",
+        "reference",
+        "identifiant",
+        "key",
+        "issueinstanceid",
+        "finding",
+        "vuln id",
+        "alert id",
+        "numero",
+    ),
     "application_name": ("application", "application name", "app", "project", "projet", "projectname", "produit"),
     "version_name": ("version", "version name", "branch", "branche", "release", "projectversionname"),
-    "category": ("category", "categorie", "issue", "issuename", "type", "vulnerability", "vulnerabilite",
-                 "title", "titre", "name", "nom", "check", "issue type", "finding type"),
+    "category": (
+        "category",
+        "categorie",
+        "issue",
+        "issuename",
+        "type",
+        "vulnerability",
+        "vulnerabilite",
+        "title",
+        "titre",
+        "name",
+        "nom",
+        "check",
+        "issue type",
+        "finding type",
+    ),
     "fortify_category": ("fortify category", "kingdom"),
-    "primary_rule_id": ("rule", "rule id", "regle", "ruleid", "primary rule id", "primaryruleguid", "check id",
-                        "test id", "query"),
+    "primary_rule_id": (
+        "rule",
+        "rule id",
+        "regle",
+        "ruleid",
+        "primary rule id",
+        "primaryruleguid",
+        "check id",
+        "test id",
+        "query",
+    ),
     "analyzer_type": ("analyzer", "analyseur", "engine", "engine type"),
     "primary_location": ("primary location", "primarylocation"),
     "line_number": ("line", "line number", "ligne", "linenumber", "start line", "startline", "lineno"),
-    "full_filename": ("file", "file path", "filepath", "full filename", "fullfilename", "path", "chemin",
-                      "fichier", "filename", "source file", "component", "composant", "location", "emplacement"),
+    "full_filename": (
+        "file",
+        "file path",
+        "filepath",
+        "full filename",
+        "fullfilename",
+        "path",
+        "chemin",
+        "fichier",
+        "filename",
+        "source file",
+        "component",
+        "composant",
+        "location",
+        "emplacement",
+    ),
     "function_name": ("function", "fonction", "method", "methode", "functionname"),
-    "criticality_raw": ("severity", "criticality", "criticite", "gravite", "priority", "priorite", "risk",
-                        "risque", "friority", "level", "niveau", "impact"),
+    "criticality_raw": (
+        "severity",
+        "criticality",
+        "criticite",
+        "gravite",
+        "priority",
+        "priorite",
+        "risk",
+        "risque",
+        "friority",
+        "level",
+        "niveau",
+        "impact",
+    ),
     "cwe_ids": ("cwe", "cwe id", "cwes", "cwe ids"),
     "source_comments": ("commentaires", "comments", "comment", "commentaire", "notes", "audit comment"),
     "description": ("description", "details", "detail", "message", "brief", "abstract", "resume"),
@@ -79,8 +141,27 @@ _SYNONYMS: dict[str, tuple[str, ...]] = {
 }
 
 _SEVERITY_WORDS = {
-    "critical", "critique", "high", "haute", "eleve", "elevee", "medium", "moyen", "moyenne", "low", "faible",
-    "basse", "info", "informational", "blocker", "major", "minor", "trivial", "error", "warning", "note",
+    "critical",
+    "critique",
+    "high",
+    "haute",
+    "eleve",
+    "elevee",
+    "medium",
+    "moyen",
+    "moyenne",
+    "low",
+    "faible",
+    "basse",
+    "info",
+    "informational",
+    "blocker",
+    "major",
+    "minor",
+    "trivial",
+    "error",
+    "warning",
+    "note",
 }
 _LOCATION_RE = re.compile(r"^(?P<path>[^\s:]+\.[A-Za-z0-9]{1,8}|[^\s:]*[/\\][^\s:]+):(?P<line>\d+)(?::\d+)?$")
 _PATH_RE = re.compile(r"^[^\s]+[/\\][^\s]+\.[A-Za-z0-9]{1,8}$")
@@ -133,8 +214,12 @@ class MappingProposal:
     detected_fields: list[str] = field(default_factory=list)
 
     def as_mapping(self) -> dict[str, Any]:
-        return {"fields": self.fields, "constants": self.constants, "comments_from": self.comments_from,
-                "detected_fields": self.detected_fields}
+        return {
+            "fields": self.fields,
+            "constants": self.constants,
+            "comments_from": self.comments_from,
+            "detected_fields": self.detected_fields,
+        }
 
 
 IMPORTANT_KEYS = ("source_id", "category", "full_filename", "line_number", "criticality_raw")
@@ -212,7 +297,8 @@ def propose_mapping(field_names: list[str], records: list[RawRecord], sample_siz
             used_text_sources.add(g.source)
 
     comments = [
-        name for name in field_names
+        name
+        for name in field_names
         if norm_name(name) in _SYNONYMS["source_comments"] and name not in used_text_sources
     ]
     used = {g.source for g in chosen.values()} | set(comments)
@@ -297,13 +383,15 @@ def apply_mapping(record: RawRecord, mapping: dict[str, Any], tool: str) -> Norm
             values.setdefault(key, value)
     for key, spec in mapping.get("fields", {}).items():
         v = apply_transform(spec.get("transform", "text"), record.fields.get(spec["source"]))
-        if v is not None and v != []:
+        if (v is not None and v != []) or key not in values:
             values[key] = v
-        elif key not in values:
-            values[key] = v
-    comments = [f"{name}: {_text(record.fields.get(name))}" if len(mapping.get("comments_from", [])) > 1
-                else _text(record.fields.get(name))
-                for name in mapping.get("comments_from", []) if _text(record.fields.get(name))]
+    comments = [
+        f"{name}: {_text(record.fields.get(name))}"
+        if len(mapping.get("comments_from", [])) > 1
+        else _text(record.fields.get(name))
+        for name in mapping.get("comments_from", [])
+        if _text(record.fields.get(name))
+    ]
     if comments:
         values["source_comments"] = "\n".join(c for c in comments if c)
     for key in ("description", "recommendation"):
@@ -324,7 +412,9 @@ def apply_mapping(record: RawRecord, mapping: dict[str, Any], tool: str) -> Norm
         primary_rule_id=_text(values.get("primary_rule_id")),
         analyzer_type=_text(values.get("analyzer_type")),
         primary_location=_text(values.get("primary_location")),
-        line_number=values.get("line_number") if isinstance(values.get("line_number"), int) else _int(values.get("line_number")),
+        line_number=values.get("line_number")
+        if isinstance(values.get("line_number"), int)
+        else _int(values.get("line_number")),
         full_filename=_text(values.get("full_filename")),
         function_name=_text(values.get("function_name")),
         criticality_raw=_text(values.get("criticality_raw")),

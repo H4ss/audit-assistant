@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=9"]
+dev = ["pytest>=9", "ruff>=0.16"]
 
 [project.scripts]
 paladin = "paladin.cli:main"
@@ -43,3 +43,36 @@ filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
 markers = [
     "real: test d'intégration réel opt-in (OpenCode/GLM, Fortify) — exclu de la CI",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # imports triés
+    "B",        # bugbear : pièges courants
+    "UP",       # syntaxe Python moderne
+    "SIM",      # simplifications
+    "C4",       # compréhensions
+    "PIE",      # constructions inutiles
+    "RUF",      # règles ruff
+    "S",        # sécurité (bandit)
+    "PTH",      # pathlib plutôt que os.path
+    "N",        # nommage PEP 8
+]
+ignore = [
+    "S101",     # assert : utilisé par pytest
+    "RUF001", "RUF002", "RUF003",  # caractères typographiques français (’ « » —) voulus
+    "S608",     # SQL construit : uniquement des fragments internes, valeurs toujours liées par paramètres
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "PTH"]
+"src/paladin/fixtures/demo/repos/**" = ["ALL"]  # code volontairement vulnérable de la démo
+
+[tool.ruff.format]
+quote-style = "double"

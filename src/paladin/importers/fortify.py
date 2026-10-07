@@ -31,12 +31,12 @@ class FortifyError(RuntimeError):
         self.action = action
 
 
-class TokenExpired(FortifyError):
+class TokenExpiredError(FortifyError):
     def __init__(self) -> None:
         super().__init__("Jeton Fortify expiré ou refusé.", "Renouveler le jeton puis relancer l'import avec --resume.")
 
 
-class PageFailed(FortifyError):
+class PageFailedError(FortifyError):
     def __init__(self, start: int, detail: str) -> None:
         super().__init__(f"Échec de la page démarrant à {start} : {detail}", "Relancer l'import avec --resume.")
 
@@ -75,7 +75,7 @@ class FixtureFortifySource:
         self.calls += 1
         expire_after = self.faults.get("expire_token_after_calls")
         if expire_after is not None and self.calls > expire_after:
-            raise TokenExpired()
+            raise TokenExpiredError()
         path = self.root / rel
         if not path.exists():
             return Page([], 0, b'{"data": [], "count": 0}')
@@ -95,7 +95,7 @@ class FixtureFortifySource:
     def issues_page(self, version_id: Any, start: int, limit: int) -> Page:
         if start in self.faults.get("fail_pages_at", ()):
             self.faults["fail_pages_at"] = [s for s in self.faults["fail_pages_at"] if s != start]
-            raise PageFailed(start, "erreur simulée (HTTP 502)")
+            raise PageFailedError(start, "erreur simulée (HTTP 502)")
         # Les captures sont découpées en pages p1, p2... de taille `limit` fixe.
         page_no = start // limit + 1
         return self._load(f"issues_{version_id}_p{page_no}.json")
@@ -251,7 +251,7 @@ def collect(
 
     details = _load_details(capture)
     records = []
-    for idx, (iid, item) in enumerate(by_id.items()):
+    for iid, item in by_id.items():
         merged = dict(item)
         d = details.get(str(item["id"]))
         if d is not None:
@@ -297,7 +297,8 @@ def collect(
         "completeness": read.completeness.value,
         "error": None if error is None else {"message": str(error), "action": error.action},
         "immutable_snapshot": False,
-        "snapshot_note": "La source ne garantit pas un instantané immuable : date de collecte et réponses brutes conservées.",
+        "snapshot_note": "La source ne garantit pas un instantané immuable : date de collecte et réponses brutes"
+        " conservées.",
         "capture_dir": str(capture.dir),
         "captures": capture.entries,
     }
@@ -337,5 +338,6 @@ def details_to_fields(fields: dict[str, Any]) -> dict[str, Any]:
         "trace": trace if isinstance(trace, list) else None,
         "source_comments": "\n".join(
             f"[{c.get('username', '?')}] {c.get('comment', '')}" for c in comments if c.get("comment")
-        ) or None,
+        )
+        or None,
     }

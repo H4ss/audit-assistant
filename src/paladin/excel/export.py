@@ -17,7 +17,6 @@ Garanties :
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sqlite3
 import zipfile
@@ -37,7 +36,7 @@ from paladin.contracts import (
     format_cwe_ids,
 )
 from paladin.review.decisions import excel_projection
-from paladin.util import dumps, loads, new_id, sha256_file, utcnow
+from paladin.util import dumps, file_stamp, loads, new_id, sha256_file, utcnow
 
 ANALYST_COLUMNS = {"analysis result": "analyst_result", "analysis result comment": "analyst_comment"}
 _DEFAULT_BY_HEADER = {c.header.strip().lower(): c for c in DEFAULT_COLUMNS}
@@ -56,7 +55,7 @@ UNSUPPORTED_PARTS = {
 }
 
 
-class ExportBlocked(RuntimeError):
+class ExportBlockedError(RuntimeError):
     def __init__(self, message: str, action: str, status: str = "failed") -> None:
         super().__init__(message)
         self.action = action
@@ -135,15 +134,17 @@ def sheet_plans(conn: sqlite3.Connection, campaign: dict[str, Any]) -> tuple[lis
 
 def qualify_workbook(path: Path) -> None:
     if path.suffix.lower() != ".xlsx":
-        raise ExportBlocked(f"Format non qualifié : {path.suffix}", "Le MVP écrit uniquement des classeurs .xlsx standard.")
+        raise ExportBlockedError(
+            f"Format non qualifié : {path.suffix}", "Le MVP écrit uniquement des classeurs .xlsx standard."
+        )
     try:
         with zipfile.ZipFile(path) as z:
             names = z.namelist()
     except zipfile.BadZipFile as exc:
-        raise ExportBlocked(f"Classeur illisible : {exc}", "Vérifier que le fichier est un .xlsx valide.") from exc
+        raise ExportBlockedError(f"Classeur illisible : {exc}", "Vérifier que le fichier est un .xlsx valide.") from exc
     found = sorted({label for part, label in UNSUPPORTED_PARTS.items() for n in names if n.startswith(part)})
     if found:
-        raise ExportBlocked(
+        raise ExportBlockedError(
             f"Classeur contenant des éléments non préservés à l'écriture : {', '.join(found)}.",
             "Qualification séparée requise. Exporter vers un classeur sans ces éléments ou les retirer de la cible.",
         )
@@ -151,8 +152,11 @@ def qualify_workbook(path: Path) -> None:
 
 def lock_markers(path: Path) -> list[Path]:
     """Fichiers de verrou laissés par Excel (~$nom) ou LibreOffice (.~lock.nom#)."""
-    candidates = [path.with_name("~$" + path.name), path.with_name("~$" + path.name[2:]),
-                  path.with_name(f".~lock.{path.name}#")]
+    candidates = [
+        path.with_name("~$" + path.name),
+        path.with_name("~$" + path.name[2:]),
+        path.with_name(f".~lock.{path.name}#"),
+    ]
     return [p for p in candidates if p.exists()]
 
 
@@ -195,7 +199,7 @@ def _metadata_value(finding: sqlite3.Row, key: str) -> Any:
     if key == "cwe_ids":
         ids = loads(finding["cwe_ids_json"], [])
         return format_cwe_ids(ids) if ids else None
-    if key in finding.keys():
+    if key in finding.keys():  # noqa: SIM118 — sqlite3.Row : `in` porte sur les valeurs, pas les clés
         return finding[key]
     return None
 
@@ -239,14 +243,14 @@ def _plan_sheet(
     headers = _header_map(ws)
     key_col = headers.get(_norm_header(plan.key_header))
     if key_col is None:
-        raise ExportBlocked(
+        raise ExportBlockedError(
             f"Onglet {plan.sheet!r} : colonne clé {plan.key_header!r} introuvable.",
             "Vérifier les en-têtes de l'onglet ou le mapping de la campagne.",
         )
     analyst_cols = {key: headers[h] for h, key in ANALYST_COLUMNS.items() if h in headers}
     missing = [h for h in ANALYST_COLUMNS if h not in headers]
     if missing:
-        raise ExportBlocked(
+        raise ExportBlockedError(
             f"Onglet {plan.sheet!r} : colonnes analyste absentes : {missing}.",
             "Ajouter les colonnes `analysis result` et `Analysis result comment` ou corriger le mapping.",
         )
@@ -277,15 +281,20 @@ def _plan_sheet(
             continue
         decision = None
         if f["current_decision_id"]:
-            decision = dict(conn.execute("SELECT * FROM decision_event WHERE id = ?", (f["current_decision_id"],)).fetchone())
+            decision = dict(
+                conn.execute("SELECT * FROM decision_event WHERE id = ?", (f["current_decision_id"],)).fetchone()
+            )
         result, comment = excel_projection(decision)
         desired = {"analyst_result": result, "analyst_comment": comment}
 
         if not rows:
             match_state = (loads(f["details_json"], {}).get("match") or {}).get("state")
             if plan.mode != "generate_rows":
-                reason = ("MD sans ligne Excel : proposition de nouvelle ligne (politique d'ajout non validée)"
-                          if match_state == "details_only" else "aucune ligne avec cette clé")
+                reason = (
+                    "MD sans ligne Excel : proposition de nouvelle ligne (politique d'ajout non validée)"
+                    if match_state == "details_only"
+                    else "aucune ligne avec cette clé"
+                )
                 out.without_target.append({**label, "reason": reason})
                 continue
             row = next_row
@@ -297,12 +306,26 @@ def _plan_sheet(
                     continue
                 value = _metadata_value(f, col_def.key)
                 if value is not None:
-                    out.writes.append(CellWrite(plan.sheet, row, col, col_def.key, None, value, f["id"], None,
-                                                col_def.text or col_def.key in TEXT_KEYS))
+                    out.writes.append(
+                        CellWrite(
+                            plan.sheet,
+                            row,
+                            col,
+                            col_def.key,
+                            None,
+                            value,
+                            f["id"],
+                            None,
+                            col_def.text or col_def.key in TEXT_KEYS,
+                        )
+                    )
             for key, col in analyst_cols.items():
                 if desired[key] is not None:
-                    out.writes.append(CellWrite(plan.sheet, row, col, key, None, desired[key], f["id"],
-                                                f["current_decision_id"], True))
+                    out.writes.append(
+                        CellWrite(
+                            plan.sheet, row, col, key, None, desired[key], f["id"], f["current_decision_id"], True
+                        )
+                    )
             if f["current_decision_id"]:
                 out.up_to_date.add(f["id"])
             continue
@@ -321,14 +344,20 @@ def _plan_sheet(
                 out.preserved.append({**label, "cell": f"{get_column_letter(col)}{row}", "value": current})
                 continue
             if paladin_owned or (f["id"], key) in allow_overwrite:
-                out.writes.append(CellWrite(plan.sheet, row, col, key, current, new, f["id"], f["current_decision_id"], True))
+                out.writes.append(
+                    CellWrite(plan.sheet, row, col, key, current, new, f["id"], f["current_decision_id"], True)
+                )
             else:
                 finding_ok = False
-                out.blocked.append({
-                    **label, "cell": f"{get_column_letter(col)}{row}",
-                    "reason": "valeur saisie hors Paladin, différente de la décision : revue explicite requise",
-                    "excel_value": current, "paladin_value": new,
-                })
+                out.blocked.append(
+                    {
+                        **label,
+                        "cell": f"{get_column_letter(col)}{row}",
+                        "reason": "valeur saisie hors Paladin, différente de la décision : revue explicite requise",
+                        "excel_value": current,
+                        "paladin_value": new,
+                    }
+                )
         if finding_ok and f["current_decision_id"]:
             out.up_to_date.add(f["id"])
 
@@ -355,7 +384,9 @@ def _snapshot(path: Path) -> dict[str, dict[str, Any]]:
     wb = load_workbook(path, data_only=False)
     try:
         return {
-            ws.title: {c.coordinate: (c.value, c.data_type) for row in ws.iter_rows() for c in row if c.value is not None}
+            ws.title: {
+                c.coordinate: (c.value, c.data_type) for row in ws.iter_rows() for c in row if c.value is not None
+            }
             for ws in wb.worksheets
         }
     finally:
@@ -375,7 +406,7 @@ def _verify(source_snapshot: dict, written: Path, writes: list[CellWrite], sheet
             if after.get(sheet, {}).get(coord) != val:
                 problems.append(f"{sheet}!{coord} modifiée hors périmètre")
     for sheet, cells in after.items():
-        for coord, val in cells.items():
+        for coord in cells:
             if (sheet, coord) not in targeted and coord not in source_snapshot.get(sheet, {}):
                 problems.append(f"{sheet}!{coord} ajoutée hors périmètre")
     for (sheet, coord), w in targeted.items():
@@ -391,7 +422,8 @@ def _verify(source_snapshot: dict, written: Path, writes: list[CellWrite], sheet
 def _record_run(conn, campaign_id, mode, source, destination, source_sha) -> str:
     rid = new_id()
     conn.execute(
-        "INSERT INTO export_run (id, campaign_id, mode, source_path, source_sha256, destination_path, status, created_at)"
+        "INSERT INTO export_run (id, campaign_id, mode, source_path, source_sha256, destination_path, status,"
+        " created_at)"
         " VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)",
         (rid, campaign_id, mode, str(source), source_sha, str(destination), utcnow()),
     )
@@ -439,17 +471,20 @@ def export_workbook(
 
     try:
         if not source.exists():
-            raise ExportBlocked(f"Classeur cible introuvable : {source}", "Vérifier le chemin du classeur dans la campagne.")
+            raise ExportBlockedError(
+                f"Classeur cible introuvable : {source}", "Vérifier le chemin du classeur dans la campagne."
+            )
         qualify_workbook(source)
         locks = lock_markers(destination) + (lock_markers(source) if mode == "final" else [])
         if locks:
-            raise ExportBlocked(
+            raise ExportBlockedError(
                 f"Classeur ouvert dans un tableur ({', '.join(p.name for p in locks)}).",
                 "Fermer le classeur dans Excel puis relancer l'export. Les décisions restent enregistrées.",
                 status="locked",
             )
-        tw = conn.execute("SELECT * FROM target_workbook WHERE campaign_id = ? AND path = ?",
-                          (campaign_id, str(source))).fetchone()
+        tw = conn.execute(
+            "SELECT * FROM target_workbook WHERE campaign_id = ? AND path = ?", (campaign_id, str(source))
+        ).fetchone()
         externally_modified = bool(tw and tw["known_sha256"] and tw["known_sha256"] != source_sha)
 
         plans, without_sheet = sheet_plans(conn, campaign)
@@ -458,8 +493,10 @@ def export_workbook(
         plan = _Plan()
         for sp in plans:
             if sp.sheet not in wb.sheetnames:
-                raise ExportBlocked(f"Onglet {sp.sheet!r} absent du classeur.",
-                                    "Créer l'onglet (palier P4 : schéma proposé) ou corriger la configuration.")
+                raise ExportBlockedError(
+                    f"Onglet {sp.sheet!r} absent du classeur.",
+                    "Créer l'onglet (palier P4 : schéma proposé) ou corriger la configuration.",
+                )
             _plan_sheet(conn, wb[sp.sheet], sp, allow_overwrite or set(), plan)
         _apply(wb, plan.writes)
         tmp = destination.with_name(f".~paladin-{run_id[:8]}{destination.suffix}")
@@ -469,28 +506,37 @@ def export_workbook(
         problems = _verify(_snapshot(source), tmp, plan.writes, sheet_order)
         if problems:
             tmp.unlink(missing_ok=True)
-            raise ExportBlocked("Vérification après écriture échouée : " + "; ".join(problems[:5]),
-                                "Aucun fichier remplacé. Signaler ce cas (classeur non qualifié ?).")
+            raise ExportBlockedError(
+                "Vérification après écriture échouée : " + "; ".join(problems[:5]),
+                "Aucun fichier remplacé. Signaler ce cas (classeur non qualifié ?).",
+            )
 
         backup = None
         if destination.exists():
             backups = settings.campaign_dir(campaign_id) / "backups"
             backups.mkdir(parents=True, exist_ok=True)
-            backup = backups / f"{destination.stem}.{utcnow()[:19].replace(':', '').replace('-', '')}-{run_id[:6]}{destination.suffix}"
+            backup = backups / f"{destination.stem}.{file_stamp()}-{run_id[:6]}{destination.suffix}"
             shutil.copy2(destination, backup)
         try:
-            os.replace(tmp, destination)
+            tmp.replace(destination)
         except PermissionError as exc:
             tmp.unlink(missing_ok=True)
-            raise ExportBlocked(f"Remplacement impossible : {exc}",
-                                "Fermer le classeur dans Excel puis relancer l'export. Les décisions restent enregistrées.",
-                                status="locked") from exc
-    except ExportBlocked as exc:
+            raise ExportBlockedError(
+                f"Remplacement impossible : {exc}",
+                "Fermer le classeur dans Excel puis relancer l'export. Les décisions restent enregistrées.",
+                status="locked",
+            ) from exc
+    except ExportBlockedError as exc:
         return _fail(conn, run_id, exc.status, str(exc), exc.action, destination)
     except PermissionError as exc:
-        return _fail(conn, run_id, "locked", f"Accès refusé : {exc}",
-                     "Fermer le classeur dans Excel puis relancer l'export. Les décisions restent enregistrées.",
-                     destination)
+        return _fail(
+            conn,
+            run_id,
+            "locked",
+            f"Accès refusé : {exc}",
+            "Fermer le classeur dans Excel puis relancer l'export. Les décisions restent enregistrées.",
+            destination,
+        )
 
     dest_sha = sha256_file(destination)
     summary = {
@@ -532,11 +578,27 @@ def export_workbook(
                 (new_id(), campaign_id, str(source), dest_sha, utcnow()),
             )
     manifest = {
-        "run_id": run_id, "mode": mode, "source": str(source), "source_sha256": source_sha,
-        "destination": str(destination), "destination_sha256": dest_sha,
-        "backup": str(backup) if backup else None, "created_at": utcnow(), "summary": summary,
-        "cells": [{"sheet": w.sheet, "cell": w.ref, "column": w.column_key, "old": w.old, "new": w.new,
-                   "finding_id": w.finding_id, "decision_event_id": w.decision_event_id} for w in plan.writes],
+        "run_id": run_id,
+        "mode": mode,
+        "source": str(source),
+        "source_sha256": source_sha,
+        "destination": str(destination),
+        "destination_sha256": dest_sha,
+        "backup": str(backup) if backup else None,
+        "created_at": utcnow(),
+        "summary": summary,
+        "cells": [
+            {
+                "sheet": w.sheet,
+                "cell": w.ref,
+                "column": w.column_key,
+                "old": w.old,
+                "new": w.new,
+                "finding_id": w.finding_id,
+                "decision_event_id": w.decision_event_id,
+            }
+            for w in plan.writes
+        ],
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     return ExportResult(run_id, "verified", destination, manifest_path, backup, summary)

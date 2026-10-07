@@ -79,6 +79,16 @@
       form.querySelectorAll("button").forEach((b) => { if (b !== e.submitter) b.disabled = true; }); // anti double clic
     });
 
+    // Une analyse peut arriver en arrière-plan : signaler, ne jamais remplacer la fiche sous le curseur.
+    const head = document.getElementById("finding-head");
+    const banner = document.getElementById("new-proposal");
+    setInterval(async () => {
+      try {
+        const r = await fetch(`/api/c/${form.dataset.campaign}/f/${form.dataset.finding}/status`);
+        if (r.ok && (await r.json()).analysis_seq > Number(head.dataset.seq)) banner.hidden = false;
+      } catch (_) { /* serveur arrêté : rien à signaler */ }
+    }, 10000);
+
     const setVerdict = (v) => { const r = form.querySelector(`input[name=verdict][value=${v}]`); r.checked = true; saveDraft(); };
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && typing(document.activeElement)) { document.activeElement.blur(); return; }

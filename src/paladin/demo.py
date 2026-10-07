@@ -69,8 +69,15 @@ def add_simulated_proposals(conn: sqlite3.Connection, campaign_id: str = DEMO_CA
         if row is None or conn.execute("SELECT 1 FROM analysis WHERE finding_id = ?", (row["id"],)).fetchone():
             continue
         proposal = AgentProposal.model_validate({"finding_id": row["id"], "input_revision": row["revision"], **body})
-        store_proposal(conn, row["id"], proposal, model_requested="simulation-demo", model_provider="aucun",
-                       model_resolved="simulation", is_simulated=True)
+        store_proposal(
+            conn,
+            row["id"],
+            proposal,
+            model_requested="simulation-demo",
+            model_provider="aucun",
+            model_resolved="simulation",
+            is_simulated=True,
+        )
         added += 1
     return added
 

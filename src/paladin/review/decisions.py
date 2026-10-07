@@ -82,13 +82,17 @@ def _export_state_after(conn, finding: sqlite3.Row, new_current: dict[str, Any] 
         return state
     exported = None
     if finding["exported_decision_id"]:
-        exported = dict(conn.execute("SELECT * FROM decision_event WHERE id = ?", (finding["exported_decision_id"],)).fetchone())
+        exported = dict(
+            conn.execute("SELECT * FROM decision_event WHERE id = ?", (finding["exported_decision_id"],)).fetchone()
+        )
     same = excel_projection(exported) == excel_projection(new_current)
     return ExportState.EXPORTED.value if same else ExportState.STALE.value
 
 
 def _write_event(conn, finding: sqlite3.Row, action: DecisionAction, author: str, **fields: Any) -> dict[str, Any]:
-    seq = conn.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM decision_event WHERE finding_id = ?", (finding["id"],)).fetchone()[0]
+    seq = conn.execute(
+        "SELECT COALESCE(MAX(seq), 0) + 1 FROM decision_event WHERE finding_id = ?", (finding["id"],)
+    ).fetchone()[0]
     event = {
         "id": new_id(),
         "finding_id": finding["id"],
@@ -161,10 +165,15 @@ def record_decision(
         _check_revision(finding, expected_revision)
         if action == DecisionAction.SKIP:
             event = _write_event(conn, finding, action, author)
-            conn.execute("UPDATE finding SET revision = revision + 1, updated_at = ? WHERE id = ?", (utcnow(), finding_id))
+            conn.execute(
+                "UPDATE finding SET revision = revision + 1, updated_at = ? WHERE id = ?", (utcnow(), finding_id)
+            )
             return event
         event = _write_event(
-            conn, finding, action, author,
+            conn,
+            finding,
+            action,
+            author,
             authority=authority,
             analysis_id=analysis_id,
             verdict=verdict_v.value if verdict_v else None,
@@ -183,8 +192,16 @@ def record_decision(
         conn.execute(
             "UPDATE finding SET current_decision_id = ?, review_state = ?, export_state = ?, discussion_required = ?,"
             " discussion_reason = ?, discussion_state = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
-            (event["id"], review.value, export_state, int(bool(discussion_required)), discussion_reason,
-             "open" if discussion_required else None, utcnow(), finding_id),
+            (
+                event["id"],
+                review.value,
+                export_state,
+                int(bool(discussion_required)),
+                discussion_reason,
+                "open" if discussion_required else None,
+                utcnow(),
+                finding_id,
+            ),
         )
         conn.execute("DELETE FROM draft WHERE finding_id = ?", (finding_id,))
     return event
@@ -211,9 +228,15 @@ def undo_last(conn: sqlite3.Connection, finding_id: str, *, expected_revision: i
         conn.execute(
             "UPDATE finding SET current_decision_id = ?, review_state = ?, export_state = ?, discussion_required = ?,"
             " discussion_reason = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
-            (new_current["id"] if new_current else None, review.value, export_state,
-             int(bool(new_current and new_current["discussion_required"])),
-             new_current["discussion_reason"] if new_current else None, utcnow(), finding_id),
+            (
+                new_current["id"] if new_current else None,
+                review.value,
+                export_state,
+                int(bool(new_current and new_current["discussion_required"])),
+                new_current["discussion_reason"] if new_current else None,
+                utcnow(),
+                finding_id,
+            ),
         )
     return event
 

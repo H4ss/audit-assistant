@@ -46,9 +46,7 @@ class SourceRead:
         """Complète si rien n'est resté non reconnu ; sinon partielle. Jamais présumée."""
         if self.completeness == Completeness.PARTIAL:
             return
-        if self.unrecognized:
-            self.completeness = Completeness.PARTIAL
-        elif self.expected_total is not None and self.expected_total != len(self.records):
+        if self.unrecognized or (self.expected_total is not None and self.expected_total != len(self.records)):
             self.completeness = Completeness.PARTIAL
         else:
             self.completeness = Completeness.COMPLETE
