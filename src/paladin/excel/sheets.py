@@ -91,7 +91,7 @@ def propose(
 
     cols: list[SheetColumnProposal] = [
         SheetColumnProposal(
-            header=f"ID {tool_label}"[:255],
+            header="Finding ID",
             key="source_id",
             source_field="identifiant source",
             example=str(rows[0]["source_id"]),

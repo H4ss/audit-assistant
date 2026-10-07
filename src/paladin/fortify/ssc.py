@@ -93,7 +93,7 @@ class SSCClient:
 
     base_url: str
     token: str
-    verify: bool | str = True
+    verify: bool | ssl.SSLContext = True
     timeout: float = 30.0
     filters: SSCFilters = field(default_factory=SSCFilters)
     transport: httpx.BaseTransport | None = None
@@ -271,7 +271,15 @@ def make_client(settings: Settings, transport: httpx.BaseTransport | None = None
                 "Jeton SSC absent.", "Saisir le jeton dans « Prêt pour le travail » ou `Paladin.cmd fortify login`."
             )
     ca = (settings.fortify.get("ca_bundle") or "").strip()
-    verify: bool | str = ca if ca else True
+    # Autorité d'entreprise ajoutée à un contexte TLS vérifiant (jamais de vérification désactivée).
+    try:
+        verify: bool | ssl.SSLContext = ssl.create_default_context(cafile=ca) if ca else True
+    except (OSError, ssl.SSLError) as exc:
+        raise FortifyError(
+            f"Certificat d'entreprise illisible ({ca}) : {exc}",
+            "Fournir un fichier PEM (texte « -----BEGIN CERTIFICATE----- »). Un .cer binaire se convertit avec"
+            " `certutil -encode ac.cer ac.pem` ; depuis un magasin Java : `keytool -exportcert -rfc`.",
+        ) from None
     filters = SSCFilters(
         **{k: v for k, v in (settings.fortify.get("filters") or {}).items() if k in SSCFilters.__annotations__}
     )

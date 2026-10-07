@@ -269,7 +269,7 @@ def test_new_tool_sheet_proposal_validation_and_idempotent_creation(full):
         assert res.status == "verified", res.error
     wb = load_workbook(path)
     assert wb.sheetnames[-1] == "ToolC" and wb.sheetnames[:3] == ["Synthèse", "Fortify", "ToolB"]
-    toolc = rows(path, "ToolC", "ID ToolC")
+    toolc = rows(path, "ToolC", "Finding ID")
     assert len(toolc) == 5 and wb["ToolC"].max_row == 6
     assert toolc["C-01"]["Contrôle"] == "hardcoded-credential"
     assert toolc["C-01"]["analysis result"] == "Not an issue"

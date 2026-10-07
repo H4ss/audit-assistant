@@ -204,3 +204,16 @@ def test_manifest_links_cells_to_decisions(demo):
     manifest = json.loads(res.manifest_path.read_text(encoding="utf-8"))
     cell = next(c for c in manifest["cells"] if c["column"] == "analyst_result" and c["new"] == "True Positive")
     assert cell["decision_event_id"] == ev["id"] and cell["sheet"] == "ToolB"
+
+
+def test_legacy_commentaires_header_still_filled(demo):
+    path = ex.target_path(demo["settings"], {"id": "demo", "config": {"target_workbook": "audit_shopapp_demo.xlsx"}})
+    wb = load_workbook(path)
+    ws = wb["Fortify"]
+    col = [c.value for c in ws[1]].index("Comments") + 1
+    ws.cell(row=1, column=col, value="Commentaires")  # ancien modèle (spec 21.1)
+    wb.save(path)
+    res = run(demo, mode="final")
+    headers, fortify = rows_by_key(load_workbook(path)["Fortify"], "Instance ID")
+    row = dict(zip(headers, fortify["FFFFFFFFFFFFFFFFFFFFFFFF00900002"], strict=True))
+    assert res.status == "verified" and "Audit 2025-11" in row["Commentaires"]

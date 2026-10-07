@@ -32,6 +32,7 @@ from paladin import store
 from paladin.config import Settings
 from paladin.contracts import (
     DEFAULT_COLUMNS,
+    HEADER_ALIASES,
     ExportState,
 )
 from paladin.excel.sheets import current_schema, finding_value
@@ -41,6 +42,7 @@ from paladin.util import dumps, file_stamp, loads, new_id, sha256_file, utcnow
 
 ANALYST_COLUMNS = {"analysis result": "analyst_result", "analysis result comment": "analyst_comment"}
 _DEFAULT_BY_HEADER = {c.header.strip().lower(): c for c in DEFAULT_COLUMNS}
+_DEFAULT_BY_HEADER.update({alias.lower(): c for c in DEFAULT_COLUMNS for alias in HEADER_ALIASES.get(c.key, ())})
 TEXT_KEYS = {c.key for c in DEFAULT_COLUMNS if c.text} | {"source_comments", "category", "full_filename"}
 
 # Parties OOXML que openpyxl ne préserve pas : classeur non qualifié pour l'écriture.

@@ -124,6 +124,7 @@ class DecisionAction(StrEnum):
     SKIP = "skip"  # passer (pas de décision, simple trace)
     UNDO = "undo"  # annule l'événement désigné
     BATCH = "batch"  # décision issue d'un lot
+    IMPORT = "import"  # reprise d'une valeur déjà saisie dans un classeur existant
 
 
 class Authority(StrEnum):
@@ -131,6 +132,7 @@ class Authority(StrEnum):
 
     HUMAN = "human"
     BATCH = "batch"
+    IMPORT = "import"  # valeur saisie hors Paladin, reprise d'un classeur existant
 
 
 class Completeness(StrEnum):
@@ -226,7 +228,7 @@ DEFAULT_COLUMNS: tuple[ExcelColumn, ...] = (
     ExcelColumn(key="line_number", header="Line number"),
     ExcelColumn(key="full_filename", header="Full filename"),
     ExcelColumn(key="criticality_raw", header="Criticality"),
-    ExcelColumn(key="source_comments", header="Commentaires"),
+    ExcelColumn(key="source_comments", header="Comments"),
     ExcelColumn(key="analyzer_type", header="Analyzer"),
     ExcelColumn(key="primary_rule_id", header="Primary rule ID", text=True),
     ExcelColumn(key="instance_id", header="Instance ID", text=True),
@@ -237,6 +239,11 @@ DEFAULT_COLUMNS: tuple[ExcelColumn, ...] = (
 )
 
 ANALYST_KEYS: frozenset[str] = frozenset(c.key for c in DEFAULT_COLUMNS if c.analyst)
+
+# En-têtes équivalents reconnus dans un classeur existant (export en anglais, anciens modèles conservés).
+HEADER_ALIASES: dict[str, tuple[str, ...]] = {
+    "source_comments": ("Commentaires",),  # libellé par défaut de la spec 21.1, avant le passage à l'anglais
+}
 
 # Champs purement Fortify : non imposés aux onglets concurrents (section 21.1).
 FORTIFY_ONLY_KEYS: frozenset[str] = frozenset({"fortify_category", "analyzer_type"})
