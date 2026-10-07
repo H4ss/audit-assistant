@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Nouvel onglet {{ label }} — Paladin{% endblock %}
+{% block content %}
+<form method="post" action="/c/{{ campaign.id }}/tools/{{ label }}/schema">
+<input type="hidden" name="token" value="{{ token }}">
+<section class="panel">
+  <h1>Nouvel onglet pour {{ label }}</h1>
+  <p>Proposition construite à partir des findings importés : seules les colonnes qui ont des données sont proposées. Renommer, retirer ou réordonner les colonnes libres, puis valider <strong>une fois</strong>. Les colonnes analyste et comparatives sont verrouillées.</p>
+  <label>Nom de l'onglet <input type="text" name="sheet_name" value="{{ proposal.sheet_name }}" maxlength="31"></label>
+  <p class="small muted">{{ proposal.notes }}{% if proposal.uncovered_fields %} — {{ proposal.uncovered_fields|length }} champ(s) non couvert(s) : {{ proposal.uncovered_fields|join(', ') }}{% endif %}</p>
+  <table class="table">
+    <thead><tr><th>Garder</th><th>Ordre</th><th>En-tête</th><th>Source</th><th>Disponibilité</th><th>Exemple</th></tr></thead>
+    {% for c in proposal.columns %}
+    <tr class="{{ 'muted' if c.locked }}">
+      <td>{% if c.locked or c.required %}🔒{% else %}<input type="checkbox" name="keep_{{ c.key }}" value="1" checked>{% endif %}</td>
+      <td>{% if not c.locked %}<input type="text" name="order_{{ c.key }}" value="{{ loop.index0 }}" style="width:3.5rem">{% endif %}</td>
+      <td>{% if c.locked %}<strong>{{ c.header }}</strong>{% else %}<input type="text" name="header_{{ c.key }}" value="{{ c.header }}">{% endif %}</td>
+      <td class="small">{{ c.source_field or '—' }}</td>
+      <td class="small">{{ c.availability }}</td>
+      <td class="small"><code>{{ c.example or '' }}</code></td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+<section class="panel">
+  <h2>Aperçu (premières lignes)</h2>
+  <div style="overflow-x:auto"><table class="table small">
+    <tr>{% for c in proposal.columns %}<th>{{ c.header }}</th>{% endfor %}</tr>
+    {% for row in preview %}<tr>{% for v in row %}<td>{{ v if v is not none else '' }}</td>{% endfor %}</tr>{% endfor %}
+  </table></div>
+  <button class="btn primary">Valider ce schéma</button>
+  <span class="small muted">L'onglet sera créé au prochain export ; les imports suivants réutilisent ce schéma.</span>
+</section>
+</form>
+{% endblock %}

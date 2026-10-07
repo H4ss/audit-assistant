@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Rapprochement — {{ campaign.name }}{% endblock %}
+{% block content %}
+<section class="panel hero">
+  <div>
+    <h1>Rapprochement inter-outils</h1>
+    <p class="muted">« Ce finding est-il aussi signalé par l'autre outil, et avec quelle criticité ? » Aucun verdict n'est propagé ; chaque ligne Excel reste distincte.</p>
+    <p>{{ mcount.proposed }} à décider · {{ mcount.reexam_required }} à réexaminer · {{ mcount.confirmed }} confirmé(s) · {{ mcount.rejected }} rejeté(s)</p>
+  </div>
+  <form method="post" action="/c/{{ campaign.id }}/match/run"><input type="hidden" name="token" value="{{ token }}">
+    <button class="btn primary">{{ 'Relancer' if runs else 'Préparer' }} le rapprochement</button></form>
+</section>
+
+{% if runs %}
+<section class="panel">
+  <h2>Corpus comparés</h2>
+  <table class="table">
+    <thead><tr><th>Outils</th><th>Findings</th><th>Complétude</th><th>Projection si aucun lien</th></tr></thead>
+    {% for r in runs %}
+    <tr><td>{{ r.a }} ↔ {{ r.b }}</td>
+      <td>{% for k, v in r.corpus.items() %}{{ k }} : {{ v.findings }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+      <td><span class="badge {{ 'ok' if r.comparable else 'warn' }}">{{ r.completeness }}</span></td>
+      <td>{{ 'No confirmed match (après revue)' if r.comparable else 'Unknown — corpus incomplet ou non comparable' }}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endif %}
+
+{% if missing %}
+<section class="panel callout warn">
+  <strong>Colonnes comparatives absentes du classeur</strong>
+  <ul>{% for sheet, headers in missing.items() %}<li>{{ sheet }} : {{ headers|join(', ') }}</li>{% endfor %}</ul>
+  <form method="post" action="/c/{{ campaign.id }}/match/extensions"><input type="hidden" name="token" value="{{ token }}">
+    <button class="btn">Ajouter ces colonnes à l'export</button> <span class="small">Ajoutées en fin de ligne d'en-tête ; aucune colonne existante n'est déplacée.</span></form>
+</section>
+{% endif %}
+
+{% if exact %}
+<section class="panel">
+  <h2>Candidats exacts : validation de lot possible</h2>
+  <p class="small muted">Même fichier, même ligne, même famille, même version. Liste figée : {{ exact|length }} lien(s) ; un événement par lien.</p>
+  <form method="post" action="/c/{{ campaign.id }}/match/batch">
+    <input type="hidden" name="token" value="{{ token }}">
+    <ul class="small">{% for r in exact %}<li><input type="hidden" name="rid" value="{{ r.id }}"><a href="/c/{{ campaign.id }}/match/{{ r.id }}">{{ r.a_tool }} {{ r.a_sid }} ↔ {{ r.b_tool }} {{ r.b_sid }}</a> — {{ r.a_path }}:{{ r.a_line }}</li>{% endfor %}</ul>
+    <button class="btn">Confirmer ces {{ exact|length }} liens « même occurrence »</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>Candidats</h2>
+  <table class="table">
+    <thead><tr><th>État</th><th>Proposé</th><th>Score</th><th>Finding A</th><th>Finding B</th><th></th></tr></thead>
+    {% for r in rels %}
+    <tr class="{{ 'muted' if r.state in ('confirmed', 'rejected') }}">
+      <td><span class="badge {{ 'warn' if r.state in ('proposed', 'reexam_required') else ('ok' if r.state == 'confirmed' else '') }}">{{ r.state }}{% if r.last_action == 'defer' %} · à revoir{% endif %}</span></td>
+      <td>{{ r.confirmed_type or r.proposed_type }}{% if r.cross_version %} <span class="badge warn">inter-version</span>{% endif %}</td>
+      <td>{{ r.score }}</td>
+      <td>{{ r.a_tool }} <code>{{ r.a_sid[-10:] }}</code> <span class="small muted">{{ r.a_path }}:{{ r.a_line if r.a_line is not none else '?' }}</span></td>
+      <td>{{ r.b_tool }} <code>{{ r.b_sid[-10:] }}</code> <span class="small muted">:{{ r.b_line if r.b_line is not none else '?' }}</span></td>
+      <td><a href="/c/{{ campaign.id }}/match/{{ r.id }}">ouvrir</a></td>
+    </tr>
+    {% else %}<tr><td colspan="6" class="muted">Aucun candidat. « Préparer le rapprochement » après l'import des outils.</td></tr>{% endfor %}
+  </table>
+</section>
+{% endblock %}

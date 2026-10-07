@@ -580,6 +580,256 @@ def create_app(settings: Settings) -> FastAPI:
             "analysis_seq": row["seq"] or 0,
         }
 
+    # ------------------------------------------------------- rapprochement inter-outils
+
+    def _missing_comparative(campaign: dict) -> dict[str, list[str]]:
+        """Colonnes `Found in` / `criticality in` absentes des onglets existants."""
+        from openpyxl import load_workbook
+
+        from paladin.contracts import criticality_in_header, found_in_header
+        from paladin.excel.export import target_path
+
+        tools = store.list_tools(conn, campaign["id"])
+        path = target_path(settings, campaign)
+        if not path.exists():
+            return {}
+        wb = load_workbook(path, read_only=True)
+        try:
+            out = {}
+            ext = campaign["config"].get("sheet_extensions") or {}
+            for t in tools:
+                if not t["sheet_name"] or t["sheet_name"] not in wb.sheetnames:
+                    continue
+                headers = {
+                    str(c.value).strip().lower() for c in next(wb[t["sheet_name"]].iter_rows(max_row=1)) if c.value
+                }
+                headers |= {h.lower() for h in ext.get(t["sheet_name"], [])}
+                missing = [
+                    h
+                    for o in tools
+                    if o["id"] != t["id"]
+                    for h in (found_in_header(o["label"]), criticality_in_header(o["label"]))
+                    if h.lower() not in headers
+                ]
+                if missing:
+                    out[t["sheet_name"]] = missing
+            return out
+        finally:
+            wb.close()
+
+    @app.get("/c/{cid}/match", response_class=HTMLResponse)
+    def match_page(request: Request, cid: str):
+        from paladin import matching
+
+        campaign = _campaign(cid)
+        rels = conn.execute(
+            "SELECT r.*, fa.source_id AS a_sid, fb.source_id AS b_sid, ta.label AS a_tool, tb.label AS b_tool,"
+            " fa.normalized_path AS a_path, fa.line_number AS a_line, fb.line_number AS b_line,"
+            " (SELECT action FROM relation_event e WHERE e.relation_id = r.id ORDER BY e.created_at DESC LIMIT 1)"
+            " AS last_action FROM finding_relation r JOIN finding fa ON fa.id = r.finding_a_id"
+            " JOIN finding fb ON fb.id = r.finding_b_id JOIN tool ta ON ta.id = fa.tool_id"
+            " JOIN tool tb ON tb.id = fb.tool_id WHERE fa.campaign_id = ?"
+            " ORDER BY CASE r.state WHEN 'reexam_required' THEN 0 WHEN 'proposed' THEN 1 ELSE 2 END,"
+            " (SELECT action FROM relation_event e WHERE e.relation_id = r.id ORDER BY e.created_at DESC LIMIT 1)"
+            " = 'defer', r.score DESC, fa.source_id",
+            (cid,),
+        ).fetchall()
+        runs = conn.execute(
+            "SELECT c.*, ta.label AS a, tb.label AS b FROM comparison_run c JOIN tool ta ON ta.id = c.tool_a_id"
+            " JOIN tool tb ON tb.id = c.tool_b_id WHERE c.campaign_id = ? AND c.created_at = (SELECT MAX(created_at)"
+            " FROM comparison_run c2 WHERE c2.tool_a_id = c.tool_a_id AND c2.tool_b_id = c.tool_b_id)",
+            (cid,),
+        ).fetchall()
+        return render(
+            request,
+            "match.html",
+            campaign=campaign,
+            rels=[dict(r) for r in rels],
+            runs=[dict(r) | {"corpus": loads(r["corpus_json"], {})} for r in runs],
+            exact=matching.exact_candidates(conn, cid),
+            mcount=matching.counters(conn, cid),
+            missing=_missing_comparative(campaign),
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+        )
+
+    @app.post("/c/{cid}/match/run")
+    async def match_run(request: Request, cid: str):
+        from paladin import matching
+
+        await _form(request)
+        results = matching.compare_all(conn, cid)
+        lines = [
+            f"{r.tool_a} ↔ {r.tool_b} : {r.new} nouveau(x) candidat(s), {r.unchanged} inchangé(s),"
+            f" {r.reexam} à réexaminer, corpus {r.completeness}" + "".join(f" — {n}" for n in r.notes)
+            for r in results
+        ]
+        _flash(conn, cid, "Rapprochement préparé." if results else "Il faut au moins deux outils.", "ok", lines)
+        return RedirectResponse(f"/c/{cid}/match", status_code=303)
+
+    @app.post("/c/{cid}/match/batch")
+    async def match_batch(request: Request, cid: str):
+        from paladin import matching
+
+        form = await request.form()
+        if form.get("token") != ui_token:
+            raise HTTPException(403, "Jeton d'interface invalide : recharger la page.")
+        ids = [str(x) for x in form.getlist("rid")]
+        try:
+            batch = matching.confirm_batch(conn, cid, ids, AUTHOR)
+            _flash(conn, cid, f"{len(ids)} lien(s) confirmé(s) en lot (lot {batch[:8]}), un événement par lien.", "ok")
+        except matching.MatchingError as exc:
+            _flash(conn, cid, str(exc), "warn")
+        return RedirectResponse(f"/c/{cid}/match", status_code=303)
+
+    @app.post("/c/{cid}/match/extensions")
+    async def match_extensions(request: Request, cid: str):
+        await _form(request)
+        campaign = _campaign(cid)
+        cfg = campaign["config"]
+        ext = cfg.setdefault("sheet_extensions", {})
+        for sheet, headers in _missing_comparative(campaign).items():
+            ext[sheet] = [*ext.get(sheet, []), *headers]
+        store.update_campaign_config(conn, cid, cfg)
+        _flash(
+            conn,
+            cid,
+            "Colonnes comparatives ajoutées à l'export (en fin de ligne d'en-tête, rien n'est déplacé).",
+            "ok",
+        )
+        return RedirectResponse(f"/c/{cid}/match", status_code=303)
+
+    @app.get("/c/{cid}/match/{rid}", response_class=HTMLResponse)
+    def match_card(request: Request, cid: str, rid: str):
+        from paladin.analysis import excerpt_for_finding
+        from paladin.review.decisions import current_decision
+
+        campaign = _campaign(cid)
+        rel = conn.execute("SELECT * FROM finding_relation WHERE id = ?", (rid,)).fetchone()
+        if rel is None:
+            raise HTTPException(404, "Lien inconnu")
+        sides = []
+        for fid in (rel["finding_a_id"], rel["finding_b_id"]):
+            f = conn.execute(
+                "SELECT f.*, t.label AS tool_label FROM finding f JOIN tool t ON t.id = f.tool_id WHERE f.id = ?",
+                (fid,),
+            ).fetchone()
+            sides.append(
+                {
+                    "f": dict(f),
+                    "cwe": loads(f["cwe_ids_json"], []),
+                    "decision": current_decision(conn, fid),
+                    "excerpt": excerpt_for_finding(conn, f),
+                }
+            )
+        history = conn.execute(
+            "SELECT * FROM relation_event WHERE relation_id = ? ORDER BY created_at DESC", (rid,)
+        ).fetchall()
+        return render(
+            request,
+            "match_card.html",
+            campaign=campaign,
+            rel=dict(rel),
+            sides=sides,
+            evidence=loads(rel["evidence_json"], []),
+            differences=loads(rel["differences_json"], []),
+            history=[dict(h) for h in history],
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+        )
+
+    @app.post("/c/{cid}/match/{rid}/decide")
+    async def match_decide(request: Request, cid: str, rid: str):
+        from paladin import matching
+
+        form = await _form(request)
+        op = form.get("op", "")
+        mapping = {
+            "same": ("confirm", "same_occurrence"),
+            "root": ("confirm", "same_root_cause"),
+            "different": ("reject", None),
+            "defer": ("defer", None),
+            "undo": ("undo", None),
+        }
+        if op not in mapping:
+            raise HTTPException(400, "Action inconnue")
+        action, kind = mapping[op]
+        try:
+            matching.decide(
+                conn, rid, action, author=AUTHOR, expected_revision=int(form.get("revision", "0")), relation_type=kind
+            )
+        except (matching.MatchingError, ConflictError) as exc:
+            _flash(conn, cid, str(exc), "warn")
+            return RedirectResponse(f"/c/{cid}/match/{rid}", status_code=303)
+        if op == "undo":
+            _flash(conn, cid, "Décision de rapprochement annulée (historique conservé).", "ok")
+            return RedirectResponse(f"/c/{cid}/match/{rid}", status_code=303)
+        nxt = conn.execute(
+            "SELECT r.id FROM finding_relation r JOIN finding f ON f.id = r.finding_a_id WHERE f.campaign_id = ?"
+            " AND r.state IN ('proposed', 'reexam_required') AND r.id != ? AND COALESCE((SELECT action FROM"
+            " relation_event e WHERE e.relation_id = r.id ORDER BY e.created_at DESC LIMIT 1), '') != 'defer'"
+            " ORDER BY r.state = 'proposed', r.score DESC LIMIT 1",
+            (cid, rid),
+        ).fetchone()
+        _flash(conn, cid, "Lien enregistré. Aucun verdict n'est propagé entre outils.", "ok")
+        return RedirectResponse(f"/c/{cid}/match/{nxt['id']}" if nxt else f"/c/{cid}/match", status_code=303)
+
+    # --------------------------------------------------------- nouvel onglet (schéma)
+
+    def _sheet_names(campaign: dict) -> list[str]:
+        from openpyxl import load_workbook
+
+        from paladin.excel.export import target_path
+
+        path = target_path(settings, campaign)
+        if not path.exists():
+            return []
+        wb = load_workbook(path, read_only=True)
+        try:
+            return list(wb.sheetnames)
+        finally:
+            wb.close()
+
+    @app.get("/c/{cid}/tools/{label}/schema", response_class=HTMLResponse)
+    def schema_page(request: Request, cid: str, label: str):
+        from paladin.excel import sheets
+
+        campaign = _campaign(cid)
+        try:
+            proposal = sheets.propose(conn, cid, label, _sheet_names(campaign))
+        except (sheets.SheetSchemaError, store.NotFoundError) as exc:
+            _flash(conn, cid, str(exc), "warn")
+            return RedirectResponse(f"/c/{cid}", status_code=303)
+        return render(
+            request,
+            "schema.html",
+            campaign=campaign,
+            proposal=proposal,
+            label=label,
+            preview=sheets.preview(conn, cid, proposal),
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+        )
+
+    @app.post("/c/{cid}/tools/{label}/schema")
+    async def schema_validate(request: Request, cid: str, label: str):
+        from paladin.excel import sheets
+
+        form = await _form(request)
+        campaign = _campaign(cid)
+        existing = _sheet_names(campaign)
+        try:
+            proposal = sheets.apply_edits(sheets.propose(conn, cid, label, existing), form)
+            sheets.validate(proposal, existing)
+            version = sheets.save_validated(conn, cid, proposal, "human")
+        except sheets.SheetSchemaError as exc:
+            _flash(conn, cid, f"Schéma non validé : {exc}", "warn")
+            return RedirectResponse(f"/c/{cid}/tools/{label}/schema", status_code=303)
+        _flash(
+            conn, cid, f"Onglet « {proposal.sheet_name} » validé (v{version}). Il sera créé au prochain export.", "ok"
+        )
+        return RedirectResponse(f"/c/{cid}", status_code=303)
+
     @app.post("/c/{cid}/import")
     async def run_import(request: Request, cid: str):
         from paladin.importers.pipeline import import_tool

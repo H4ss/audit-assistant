@@ -80,6 +80,41 @@ Un contenu non reconnu (ligne de tableau mal formée, section inconnue) est **si
 - Une valeur saisie à la main dans l'Excel n'est jamais écrasée sans autorisation explicite : la ligne est signalée « bloquée ».
 - Chaque export produit un manifeste qui relie chaque cellule modifiée à sa décision.
 
+## Nouvel outil sans onglet
+
+Pour un outil importé qui n'a pas encore d'onglet dans le classeur (par exemple ToolC), le tableau de bord propose **« Proposer un onglet »** :
+
+- Paladin propose les colonnes **qui ont des données** dans les findings importés, ainsi que les champs propres à l'outil.
+- La clé, les colonnes analyste et les paires comparatives sont verrouillées.
+- Vous renommez, retirez ou réordonnez les autres colonnes, avec un aperçu des premières lignes, puis vous validez **une fois**.
+- L'onglet est créé au prochain export, à la fin du classeur ; les exports suivants ne dupliquent aucune ligne.
+- Une évolution ultérieure ajoute des colonnes, sans jamais en retirer.
+
+## Rapprochement inter-outils
+
+Page **« Rapprochement »** (tableau de bord, section 4) :
+
+1. **Préparer le rapprochement**. Pour chaque paire d'outils, Paladin cherche des candidats :
+   - le **même fichier** est toujours requis ; ensuite comptent la proximité de ligne, la fonction, la famille et la CWE ;
+   - la CWE ou la ligne seules ne suffisent jamais ;
+   - chaque candidat affiche ses concordances et ses différences.
+2. **Décider** dans la vue côte à côte : `S` même occurrence, `C` cause commune seulement, `D` différent, `R` à revoir, `U` annuler.
+   - Un lien peut être confirmé même si les verdicts diffèrent : le désaccord reste visible.
+   - **Aucun verdict n'est propagé**, et A–B + B–C ne confirme pas A–C.
+3. **Lot** : les candidats exacts (même fichier, même ligne, même famille, même version) se confirment en une fois, à partir d'une liste figée, avec un événement par lien.
+4. Un rejet est conservé : le même faux ami n'est reproposé que si l'une des sources change. Un lien confirmé dont la source change passe en « réexamen requis ».
+
+Colonnes écrites dans l'Excel :
+
+| Situation | `Found in <outil>` | `criticality in <outil>` |
+|---|---|---|
+| Au moins un lien « même occurrence » confirmé | `Yes` | criticité brute ; si plusieurs liens : `ID: criticité; ID: criticité` |
+| Candidats encore à décider | `Pending review` | vide |
+| Corpus absent, incomplet (import partiel) ou non comparé | `Unknown` | vide |
+| Corpus complet, aucun candidat restant, aucun lien confirmé | `No confirmed match` | vide |
+
+`No confirmed match` ne veut pas dire que l'outil ne sait pas détecter la vulnérabilité. Si un onglet existant n'a pas les colonnes d'un outil, le bouton « Ajouter ces colonnes à l'export » les ajoute en fin de ligne d'en-tête. Annuler un lien après export rend l'Excel **périmé** : réexporter.
+
 ## Agent d'analyse (OpenCode + GLM)
 
 L'agent **propose** une analyse argumentée pour chaque finding. Vous restez seul à décider.

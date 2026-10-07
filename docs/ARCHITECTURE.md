@@ -43,7 +43,8 @@
 | `readiness.py` | Checklist « Prêt pour le travail ? » | P4 |
 | `campaigns.py` | Création d'une campagne réelle depuis un JSON validé | P2 |
 | `agent/` | Jobs avec bail, API agent, outils OpenCode, skill | P3 |
-| `matching/` | Rapprochement inter-outils, projections `Found in` | P5 |
+| `matching.py` | Candidats, décisions de lien, lots, projections `Found in` / `criticality in` | P5 |
+| `excel/sheets.py`, `excel/template.py` | Schéma d'onglet pour un nouvel outil, classeur neuf | P5 / P4 |
 | `rules/` | Mémoire, règles, groupes et lots | P6 |
 
 ## Invariants

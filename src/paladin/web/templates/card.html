@@ -137,8 +137,7 @@
   <details {{ 'open' if c.excerpt and not a }}>
     <summary>Code source {% if c.excerpt %}— {{ c.excerpt.repo }}/{{ c.excerpt.path }}{% endif %}</summary>
     {% if c.excerpt %}
-    <pre class="code numbered">{% for no, text in c.excerpt.lines %}<span class="{{ 'hl' if no in c.excerpt.highlight }}"><i>{{ no }}</i>{{ text }}</span>
-{% endfor %}</pre>
+    <pre class="code numbered">{% for no, text in c.excerpt.lines %}<span class="{{ 'hl' if no in c.excerpt.highlight }}"><i>{{ no }}</i>{{ text }}</span>{% endfor %}</pre>
     {% else %}<p class="muted">Fichier non disponible dans les dépôts autorisés de la campagne.</p>{% endif %}
   </details>
   <details>
