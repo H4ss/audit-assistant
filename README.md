@@ -19,6 +19,15 @@ Ensuite :
 
 Au premier lancement, le script installe tout (1 à 2 minutes), crée une **démo avec des données fictives** et ouvre le navigateur. Pour arrêter : `Ctrl+C` dans la fenêtre.
 
+## Sur le PC de travail, en 4 étapes
+
+1. **Installer** : `git clone …` puis double-clic sur `Paladin.cmd`.
+2. **Connecter le modèle** : dans OpenCode, `/connect` vers le fournisseur de l'entreprise (une fois). Puis, dans Paladin, page **Agent** : « Détecter mes modèles », choisir le GLM, « Tester et utiliser ». Paladin ne demande aucune clé.
+3. **Connecter Fortify** : page **Prêt pour le travail ?**, saisir l'URL SSC et le jeton, puis « Lancer le diagnostic ».
+4. **Choisir les applications** : page **Applications SSC**. `APP.SUB1` + `APP.SUB2` = une entrée, `APP2.*` = une autre. Cocher, indiquer les dépôts, puis « Créer » et « Importer ».
+
+Guide détaillé, liste des prérequis et dépannage : [docs/PC_DE_TRAVAIL.md](docs/PC_DE_TRAVAIL.md).
+
 ## Utiliser
 
 1. **Sources** : cliquer sur « Importer ». Si une source est nouvelle, Paladin propose comment la lire. Vous validez une fois, et c'est retenu pour la suite.

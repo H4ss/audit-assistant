@@ -21,7 +21,9 @@ Disposition d'un espace :
 from __future__ import annotations
 
 import contextlib
+import json
 import os
+import re
 import secrets
 import sys
 import tomllib
@@ -149,6 +151,35 @@ def load_settings(home: Path | None = None) -> Settings:
         fortify=data.get("fortify", {}),
         editor=data.get("editor", {}),
     )
+
+
+def set_config_value(path: Path, section: str, key: str, value: str | int | float | bool) -> None:
+    """Modifie une valeur de `paladin.toml` en conservant le reste du fichier (commentaires compris)."""
+    rendered = (
+        json.dumps(value) if isinstance(value, str) else str(value).lower() if isinstance(value, bool) else str(value)
+    )
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    out, in_section, done = [], False, False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if in_section and not done:
+                out.append(f"{key} = {rendered}")
+                done = True
+            in_section = stripped == f"[{section}]"
+        elif in_section and not done and re.match(rf"^{re.escape(key)}\s*=", stripped):
+            comment = line[line.index("#") :] if "#" in line.split("=", 1)[1] else ""
+            out.append(f"{key} = {rendered}" + (f"   {comment}" if comment else ""))
+            done = True
+            continue
+        out.append(line)
+    if not done:
+        if not in_section:
+            out += ["", f"[{section}]"]
+        out.append(f"{key} = {rendered}")
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    with path.open("rb") as fh:  # le fichier doit rester du TOML valide
+        tomllib.load(fh)
 
 
 def ensure_campaign_dirs(settings: Settings, campaign_id: str) -> Path:

@@ -2,7 +2,8 @@
 
 Mise à jour à chaque palier. Le README n'annonce que ce qui est vérifié.
 
-- **Fortify réel : non vérifié.** Les captures de `fixtures/demo/fortify` ont une forme *inspirée* d'une API SSC mais sont fictives. Les noms de champs (`issueName`, `kingdom`, `friority`...) et leur association aux colonnes `Category` / `Fortify Category` sont des hypothèses déclarées dans `campaign.json`, à confirmer par le diagnostic sur le PC de travail.
+- **Fortify SSC réel : non vérifié.** Le client suit la forme publique de l'API v1 (`/projects`, `/projects/{id}/versions`, `/projectVersions/{id}/issues`, `/issueDetails/{id}`) et a été testé contre un SSC simulé. `paladin fortify check` vérifie chacun de ces endpoints sur l'instance avant tout import. Le nombre de findings par version suit les filtres par défaut (masqués, supprimés et retirés exclus), configurables dans `[fortify] filters`.
+- **Captures de démonstration :** Les captures de `fixtures/demo/fortify` ont une forme *inspirée* d'une API SSC mais sont fictives. Les noms de champs (`issueName`, `kingdom`, `friority`...) et leur association aux colonnes `Category` / `Fortify Category` sont des hypothèses déclarées dans `campaign.json`, à confirmer par le diagnostic sur le PC de travail.
 - **OpenCode / GLM réel : vérifié sur le poste de développement** (Linux, OpenCode v2.0.22, `openrouter/z-ai/glm-5.3`). **Non vérifié** sur le PC de travail (Windows, fournisseur de l'entreprise) : à valider avec `tests/test_real_agent.py`.
 - **OpenCode V2 : spécificités vérifiées** :
   - les outils personnalisés passent par un plugin V2 (`.opencode/plugins/`) ; le format V1 (`.opencode/tools/`) est ignoré en silence ;

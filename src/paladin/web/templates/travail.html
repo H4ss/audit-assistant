@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Prêt pour le travail ? — Paladin{% endblock %}
+{% block content %}
+<section class="panel hero">
+  <div>
+    <h1>Prêt pour le PC de travail ?</h1>
+    <p class="muted">{{ done }} / {{ total }} éléments prêts. Chaque ligne indique quoi faire ensuite.</p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/agent">Connexion de l'agent</a>
+    <a class="btn" href="/fortify/discover">Applications SSC</a>
+    {% if campaigns %}<a class="btn" href="/c/{{ campaigns[0].id }}">Campagne</a>{% endif %}
+  </div>
+</section>
+
+{% for section, items in sections.items() %}
+<section class="panel">
+  <h2>{{ section }}</h2>
+  <table class="table">
+    {% for it in items %}
+    <tr>
+      <td style="width:7rem"><span class="badge {{ 'ok' if it.status == 'ok' else ('warn' if it.status == 'attention' else 'bad') }}">{{ it.status }}</span></td>
+      <td style="width:16rem"><strong>{{ it.label }}</strong></td>
+      <td>{{ it.detail }}{% if it.action %}<br><span class="small">→ {{ it.action }}</span>{% endif %}</td>
+      <td style="width:6rem">{% if it.link %}<a href="{{ it.link }}">ouvrir</a>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+{% endfor %}
+
+<section class="panel" id="ssc">
+  <h2>Connexion Fortify SSC (lecture seule)</h2>
+  <form method="post" action="/travail/ssc">
+    <input type="hidden" name="token" value="{{ token }}">
+    <label>URL SSC <input type="text" name="url" value="{{ fortify.url or '' }}" placeholder="https://ssc.entreprise/ssc"></label>
+    <label>Certificat de l'autorité d'entreprise (.pem), seulement en cas d'erreur TLS
+      <input type="text" name="ca_bundle" value="{{ fortify.ca_bundle or '' }}" placeholder="C:\Certificats\ac-interne.pem"></label>
+    <label>Jeton SSC (UnifiedLoginToken ou CIToken) — laisser vide pour garder l'actuel
+      <input type="password" name="ssc_token" autocomplete="off" placeholder="collé depuis SSC › Administration › Gestion des jetons"></label>
+    <button class="btn primary">Enregistrer</button>
+  </form>
+  <p class="small muted">Le jeton est stocké dans le dossier de données (secrets/), jamais dans le dépôt ni dans les rapports. Le proxy suit les variables HTTPS_PROXY / NO_PROXY du poste.</p>
+  <form method="post" action="/travail/check" class="row">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button class="btn">Lancer le diagnostic</button>
+    <a href="/travail/rapport">Voir le dernier rapport</a>
+  </form>
+</section>
+
+<section class="panel">
+  <details>
+    <summary>À obtenir avant d'arriver sur le poste (liste papier)</summary>
+    <ul>
+      <li><strong>SSC</strong> : URL exacte (souvent https://…/ssc), un compte avec accès <em>lecture</em> aux applications visées, un jeton <code>UnifiedLoginToken</code> ou <code>CIToken</code>.</li>
+      <li><strong>Réseau</strong> : proxy d'entreprise (HTTPS_PROXY) et, en cas d'erreur TLS, le certificat .pem de l'autorité interne.</li>
+      <li><strong>Applications</strong> : la liste des groupes (APP.*) à auditer ; chaque sous-application doit avoir une version nommée exactement « release ».</li>
+      <li><strong>Code</strong> : les dépôts clonés au commit correspondant à la release scannée.</li>
+      <li><strong>Agent</strong> : OpenCode installé et déjà connecté au fournisseur GLM de l'entreprise (<code>/connect</code>).</li>
+      <li><strong>Excel</strong> : le classeur d'audit (avec un onglet « Fortify »), ou rien : Paladin en génère un.</li>
+      <li><strong>Concurrents</strong> : leurs exports (Excel, CSV, MD, SARIF) ; Paladin propose le mapping à valider.</li>
+    </ul>
+  </details>
+</section>
+{% endblock %}

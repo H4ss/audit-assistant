@@ -20,6 +20,25 @@ if os.environ.get("PWD") and Path(os.environ["PWD"]).resolve() != Path.cwd().res
     print(json.dumps({"type": "error", "error": {"message": 'Agent not found: "paladin-analyst"'}}))
     sys.exit(1)
 mode = os.environ.get("FAKE_OPENCODE_MODE", "ok")
+if sys.argv[1:3] == ["api", "--standalone"]:  # API locale d'OpenCode : modèles connus
+    models = [
+        {"providerID": "zai-corp", "modelID": "glm-5.3", "name": "GLM 5.3"},
+        {"providerID": "zai-corp", "modelID": "glm-4.5-air", "name": "GLM 4.5 Air"},
+        {"providerID": "other", "modelID": "big-model", "name": "Big"},
+    ]
+    data = {"/api/model": models, "/api/model/default": models[0]}.get(sys.argv[-1])
+    print(json.dumps({"location": {}, "data": data}))
+    sys.exit(0)
+if sys.argv[1:2] == ["--version"]:
+    print("opencode v2.0.22")
+    sys.exit(0)
+if mode == "smoke_ok":
+    print(json.dumps({"type": "text", "part": {"type": "text", "text": "OK"}}))
+    print(json.dumps({"type": "step_finish", "part": {"type": "step-finish", "cost": 0.0004, "tokens": {"input": 9}}}))
+    sys.exit(0)
+if mode == "smoke_auth":
+    print(json.dumps({"type": "error", "error": {"type": "provider.auth", "message": "Missing Authentication header"}}))
+    sys.exit(0)
 if mode in ("probe_ok", "probe_bad"):  # sondage des accès : trace d'outils simulée
     tools = [("paladin_claim", "completed"), ("bash", "error")]
     if mode == "probe_bad":

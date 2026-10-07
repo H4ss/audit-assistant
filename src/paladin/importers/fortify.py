@@ -96,9 +96,20 @@ class FixtureFortifySource:
         if start in self.faults.get("fail_pages_at", ()):
             self.faults["fail_pages_at"] = [s for s in self.faults["fail_pages_at"] if s != start]
             raise PageFailedError(start, "erreur simulée (HTTP 502)")
-        # Les captures sont découpées en pages p1, p2... de taille `limit` fixe.
-        page_no = start // limit + 1
-        return self._load(f"issues_{version_id}_p{page_no}.json")
+        self.calls += 1
+        expire_after = self.faults.get("expire_token_after_calls")
+        if expire_after is not None and self.calls > expire_after:
+            raise TokenExpiredError()
+        # Les captures sont rangées en fichiers p1, p2… ; la page demandée est découpée dans leur concaténation.
+        items: list[dict[str, Any]] = []
+        total = None
+        for page in sorted(self.root.glob(f"issues_{version_id}_p*.json")):
+            doc = json.loads(page.read_bytes())
+            items += doc.get("data", [])
+            total = doc.get("count", total)
+        chunk = items[start : start + limit]
+        raw = json.dumps({"data": chunk, "count": total, "start": start, "limit": limit}).encode("utf-8")
+        return Page(chunk, total, raw)
 
     def issue_details(self, issue_id: Any) -> Page:
         return self._load(f"details/{issue_id}.json")

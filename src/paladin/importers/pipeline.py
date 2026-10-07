@@ -107,6 +107,7 @@ class ImportReport:
     ambiguous: int = 0
     divergent: int = 0
     completeness: str = Completeness.UNKNOWN.value
+    notes: list[str] = field(default_factory=list)
     error: dict[str, str] | None = None
     blocked: dict[str, Any] | None = None
 
@@ -272,6 +273,29 @@ def resolve_repo(path: str | None, repos: list[dict[str, Any]]) -> tuple[str | N
     for repo in repos:
         if q.startswith(repo["name"] + "/"):
             return repo["id"], repo["name"], q[len(repo["name"]) + 1 :]
+    return infer_scanner_root(p, repos)
+
+
+def infer_scanner_root(path: str, repos: list[dict[str, Any]]) -> tuple[str | None, str | None, str | None]:
+    """Déduit la racine du scanner : la plus longue fin de chemin qui existe dans UN seul dépôt.
+
+    `/build/ws/shop-api/app/orders.py` + dépôt contenant `app/orders.py` -> racine `/build/ws/shop-api/`.
+    La racine déduite est mémorisée sur le dépôt (`scanner_roots`) pour les chemins suivants.
+    Plusieurs dépôts candidats : rien n'est déduit (pas de rapprochement arbitraire).
+    """
+    parts = [x for x in path.split("/") if x]
+    for k in range(len(parts) - 1):
+        tail = "/".join(parts[k:])
+        hits = [r for r in repos if r.get("path") and (Path(r["path"]) / tail).is_file()]
+        if len(hits) == 1:
+            repo = hits[0]
+            root = path[: len(path) - len(tail)]
+            if root and root not in repo["scanner_roots"]:
+                repo["scanner_roots"].append(root)
+                repo.setdefault("_inferred_roots", []).append(root)
+            return repo["id"], repo["name"], tail
+        if len(hits) > 1:
+            return None, None, None
     return None, None, None
 
 
@@ -432,8 +456,9 @@ def _identity(f: NormalizedFinding, norm_path: str | None) -> tuple[str, str]:
 
 
 def _scope_key(tool: str, f: NormalizedFinding, scope: dict[str, Any]) -> str:
-    app = scope.get("application_name") or f.application_name or "-"
-    version = scope.get("version_id") or scope.get("version_name") or f.version_name or "-"
+    """Contexte de l'identifiant source : outil | application | version (valeurs du finding d'abord)."""
+    app = f.application_name or scope.get("application_name") or "-"
+    version = f.version_source_id or scope.get("version_id") or scope.get("version_name") or f.version_name or "-"
     return f"{tool}|{app}|{version}"
 
 
@@ -681,7 +706,7 @@ def import_tool(
     prepared: list[_Prepared] = []
     try:
         for src in spec["sources"]:
-            if src["kind"] in ("fortify_fixture", "fortify_api"):
+            if src["kind"] in ("fortify_fixture", "fortify_ssc"):
                 prepared.append(_prepare_fortify(settings, campaign, tool, spec, src, fortify_source, resume, report))
                 continue
             path = resolve_source_path(settings, campaign, src)
@@ -761,6 +786,13 @@ def _ingest(conn, campaign_id, tool, spec, loaded: dict[str, _Loaded], repos, re
     seen: dict[tuple[str, str], str] = {}
     for m in merged_list:
         _upsert(conn, campaign_id, tool, m, scope, repos, runs, seen, report, commit_sha)
+    for repo in repos:
+        if repo.get("_inferred_roots"):
+            conn.execute(
+                "UPDATE repo SET scanner_roots_json = ? WHERE id = ?", (dumps(repo["scanner_roots"]), repo["id"])
+            )
+            for root in repo["_inferred_roots"]:
+                report.notes.append(f"Racine du scanner déduite : {root} → dépôt {repo['name']}")
 
     completeness = [Completeness(lo.read.completeness) for lo in loaded.values()]
     if all(c == Completeness.COMPLETE for c in completeness):
@@ -787,70 +819,120 @@ def _ingest(conn, campaign_id, tool, spec, loaded: dict[str, _Loaded], repos, re
         )
 
 
+DEFAULT_FORTIFY_FIELD_MAP = {
+    "source_id": "issueInstanceId",
+    "category": "issueName",
+    "fortify_category": "kingdom",
+    "criticality_raw": "friority",
+    "primary_location": "primaryLocation",
+    "line_number": "lineNumber",
+    "full_filename": "fullFileName",
+    "analyzer_type": "analyzer",
+    "primary_rule_id": "primaryRuleGuid",
+    "cwe_ids": "cwe",
+}
+
+
+def _fortify_source(settings, campaign, src, source):
+    if source is not None:
+        return source
+    if src["kind"] == "fortify_fixture":
+        return fty.FixtureFortifySource(resolve_source_path(settings, campaign, src))
+    if src["kind"] == "fortify_ssc":
+        from paladin.fortify.ssc import make_client
+
+        try:
+            return make_client(settings)
+        except fty.FortifyError as exc:
+            raise ImportBlockedError(str(exc), exc.action) from None
+    raise ImportBlockedError(f"Source Fortify inconnue : {src['kind']}", "Types : fortify_ssc, fortify_fixture.")
+
+
 def _prepare_fortify(settings, campaign, tool, spec, src, source, resume, report) -> _Prepared:
+    """Collecte une ou plusieurs versions `release` (sous-applications d'un même groupe) en une entrée."""
     cfg = spec.get("fortify") or {}
-    if source is None:
-        if src["kind"] != "fortify_fixture":
-            raise ImportBlockedError(
-                "Connecteur Fortify réel non disponible : aucun endpoint n'a été vérifié sur l'instance.",
-                "Exécuter le diagnostic sur le PC de travail (palier P4 / étape B).",
-            )
-        source = fty.FixtureFortifySource(resolve_source_path(settings, campaign, src))
-    choice = fty.select_version(
-        source, cfg["application_name"], cfg.get("version_name", "release"), cfg.get("version_id")
-    )
-    captures = settings.campaign_dir(campaign["id"]) / "captures"
-    resume_manifest = None
-    if resume:
-        latest = sorted(captures.glob("fortify-*/manifest.json"))
-        if latest:
-            m = json.loads(latest[-1].read_text(encoding="utf-8"))
-            if m.get("completeness") != "complete":
-                resume_manifest = m
-    capture_dir = captures / f"fortify-{file_stamp()}-{new_id()[:6]}"
-    result = fty.collect(
-        source,
-        choice,
-        capture_dir,
-        page_size=int(cfg.get("page_size", 8)),
-        filters=cfg.get("filters"),
-        resume_manifest=resume_manifest,
-    )
-    read = result.read
-    mapping = _fortify_mapping(cfg["field_map"])
+    source = _fortify_source(settings, campaign, src, source)
+    version_name = cfg.get("version_name", "release")
+    targets = cfg.get("versions") or [
+        {"application_name": cfg["application_name"], "version_id": cfg.get("version_id")}
+    ]
+    mapping = _fortify_mapping(cfg.get("field_map") or DEFAULT_FORTIFY_FIELD_MAP)
     validate_mapping(mapping)
-    findings = []
-    for rec in read.records:
-        nf = apply_mapping(
-            RawRecord(fields={k: v for k, v in rec.fields.items() if k != "_details"}, locator=rec.locator),
-            mapping,
-            tool["label"],
+    captures = settings.campaign_dir(campaign["id"]) / "captures"
+    filters = getattr(getattr(source, "filters", None), "as_dict", lambda: cfg.get("filters"))()
+    findings: list[NormalizedFinding] = []
+    records: list[RawRecord] = []
+    notes: list[str] = []
+    manifests: list[str] = []
+    expected = 0
+    complete = True
+    for target in targets:
+        choice = fty.select_version(source, target["application_name"], version_name, target.get("version_id"))
+        resume_manifest = None
+        if resume:
+            latest = sorted(captures.glob(f"fortify-{choice.version_id}-*/manifest.json"))
+            if latest:
+                m = json.loads(latest[-1].read_text(encoding="utf-8"))
+                resume_manifest = m if m.get("completeness") != "complete" else None
+        capture_dir = captures / f"fortify-{choice.version_id}-{file_stamp()}-{new_id()[:6]}"
+        result = fty.collect(
+            source,
+            choice,
+            capture_dir,
+            page_size=int(cfg.get("page_size", 200)),
+            filters=filters,
+            resume_manifest=resume_manifest,
         )
-        extra = fty.details_to_fields(rec.fields)
-        nf = nf.model_copy(update={k: v for k, v in extra.items() if v is not None and k != "source_comments"})
-        if extra["source_comments"]:
-            nf = nf.model_copy(
-                update={"source_comments": "\n".join(filter(None, [nf.source_comments, extra["source_comments"]]))}
+        manifests.append(str(result.manifest_path))
+        read = result.read
+        complete = complete and read.completeness == Completeness.COMPLETE
+        expected += read.expected_total or 0
+        notes += [f"{choice.application_name} : {n}" for n in read.notes]
+        if result.error:
+            report.error = {"message": f"{choice.application_name} : {result.error}", "action": result.error.action}
+        for rec in read.records:
+            records.append(rec)
+            nf = apply_mapping(
+                RawRecord(fields={k: v for k, v in rec.fields.items() if k != "_details"}, locator=rec.locator),
+                mapping,
+                tool["label"],
             )
-        nf = nf.model_copy(
-            update={
-                "application_name": choice.application_name,
-                "version_name": choice.version_name,
-                "version_source_id": str(choice.version_id),
-            }
-        )
-        findings.append(nf)
+            extra = fty.details_to_fields(rec.fields)
+            nf = nf.model_copy(update={k: v for k, v in extra.items() if v is not None and k != "source_comments"})
+            if extra["source_comments"]:
+                joined = "\n".join(filter(None, [nf.source_comments, extra["source_comments"]]))
+                nf = nf.model_copy(update={"source_comments": joined})
+            nf = nf.model_copy(
+                update={
+                    "application_name": choice.application_name,
+                    "version_name": choice.version_name,
+                    "version_source_id": str(choice.version_id),
+                }
+            )
+            findings.append(nf)
+    aggregated = SourceRead(
+        kind="fortify",
+        records=records,
+        field_names=sorted({k for r in records for k in r.fields if not k.startswith("_")}),
+        expected_total=expected,
+        completeness=Completeness.COMPLETE if complete else Completeness.PARTIAL,
+        notes=notes,
+    )
+    aggregated.scope = {
+        "versions": [{"application": t["application_name"]} for t in targets],
+        "filters": filters,
+        "source": getattr(source, "name", "?"),
+    }
+    profile = "field_map déclaré" if cfg.get("field_map") else "field_map par défaut (à vérifier par fortify check)"
     sr = SourceReport(
         src["role"],
         "fortify",
-        str(result.manifest_path),
+        "; ".join(manifests),
         len(findings),
-        read.completeness.value,
+        aggregated.completeness.value,
         [],
         [],
-        read.notes,
-        "field_map déclaré (à vérifier sur l'instance réelle)",
+        notes,
+        profile,
     )
-    if result.error:
-        report.error = {"message": str(result.error), "action": result.error.action}
-    return _Prepared(src, read, findings, sr, None)
+    return _Prepared(src, aggregated, findings, sr, None)

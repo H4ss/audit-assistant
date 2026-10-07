@@ -17,7 +17,7 @@ from paladin.config import Settings, ensure_campaign_dirs
 from paladin.importers.markdown import PROFILES
 
 TOOL_KINDS = {"fortify", "excel_md", "excel", "csv", "md", "sarif"}
-SOURCE_KINDS = {"excel", "csv", "md", "sarif", "fortify_fixture", "fortify_api"}
+SOURCE_KINDS = {"excel", "csv", "md", "sarif", "fortify_fixture", "fortify_ssc"}
 ROLES = {"findings", "inventory", "details"}
 
 
@@ -73,8 +73,6 @@ def validate_descriptor(desc: dict[str, Any], base: Path) -> dict[str, Any]:
                 raise CampaignError(f"{where}.kind : une valeur parmi {sorted(SOURCE_KINDS)}.")
             if s["kind"] == "md" and s.get("profile") not in PROFILES:
                 raise CampaignError(f"{where}.profile : une valeur parmi {list(PROFILES)}.")
-            if s["kind"] == "fortify_api":
-                raise CampaignError(f"{where} : le connecteur Fortify réel n'est pas encore vérifié (palier P4).")
             if s.get("path") and s["path"] != "@target":
                 s["path"] = _abs(base, s["path"])
                 if not Path(s["path"]).exists():

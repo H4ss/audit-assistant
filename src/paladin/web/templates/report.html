@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Rapport de diagnostic — Paladin{% endblock %}
+{% block content %}
+<section class="panel">
+  <p class="muted small">{{ path }} — sans secret, transmissible à l'équipe SSC.</p>
+  <pre class="code" style="white-space: pre-wrap">{{ text }}</pre>
+  <a href="/travail">← Prêt pour le travail</a>
+</section>
+{% endblock %}

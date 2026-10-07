@@ -214,6 +214,8 @@ def cmd_agent(args: argparse.Namespace) -> int:
             print(f"Version des instructions : {workspace.skill_version()}")
             print("Usage interactif : ouvrir OpenCode dans ce dossier, choisir l'agent « paladin-analyst ».")
             return 0
+        if args.action == "connect":
+            return _agent_connect(settings, args.model)
         if args.action == "probe":
             from paladin.agent.runner import AgentRunError, probe_agent
 
@@ -272,6 +274,142 @@ def cmd_agent(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def _agent_connect(settings, model: str | None) -> int:
+    """Choisir et tester le modèle de l'OpenCode déjà configuré sur le poste."""
+    from paladin.agent import connect
+
+    print("Recherche d'OpenCode et des modèles qu'il connaît déjà…")
+    info = connect.detect(settings)
+    if info.error:
+        print(f"{info.error}\n→ Installer OpenCode (https://opencode.ai), puis relancer cette commande.")
+        return 2
+    print(f"OpenCode {info.version} : {info.path}")
+    if not model:
+        if not info.models:
+            print("Aucun modèle connecté dans votre OpenCode.")
+            print("→ Dans OpenCode : `/connect` (ou `opencode auth login`), choisir le fournisseur de l'entreprise,")
+            print("  puis relancer. Ou indiquer directement : agent connect --model fournisseur/modèle")
+            return 2
+        for i, m in enumerate(info.models[:30], start=1):
+            star = " (défaut OpenCode)" if m.id == info.default_model else ""
+            print(f"  {i:2}. {m.id}  — {m.name}{star}")
+        choice = input("Numéro du modèle à utiliser [1] : ").strip() or "1"
+        if not choice.isdigit() or not 1 <= int(choice) <= min(30, len(info.models)):
+            print("Choix invalide.")
+            return 2
+        model = info.models[int(choice) - 1].id
+    print(f"Test de {model} (une question d'une ligne)…")
+    res = connect.smoke_test(settings, model)
+    connect.record_smoke(settings, res)
+    if not res.ok:
+        print(f"ÉCHEC : {res.error}\n→ {res.action}")
+        return 1
+    print(f"OK : réponse « {res.answer} » en {res.seconds:.0f} s (coût {res.cost_usd or 0:.4f} $).")
+    connect.save_model(settings, model)
+    print(f"Modèle enregistré dans {settings.config_path}.")
+    print("Vérification des accès de l'agent (sondage de sécurité)…")
+    from paladin.agent.runner import probe_agent
+
+    probe = probe_agent(settings, model)
+    print(
+        "OK : l'agent n'a accès qu'aux outils Paladin."
+        if probe.ok
+        else f"ATTENTION : outils interdits {probe.forbidden}"
+    )
+    print("Prêt. Mettre des findings en file dans l'interface, puis : Paladin.cmd agent run --max-jobs 5")
+    return 0 if probe.ok else 1
+
+
+def cmd_fortify(args: argparse.Namespace) -> int:
+    """Fortify SSC : login (URL, jeton, certificat), check, discover, create."""
+    from paladin import readiness
+    from paladin.config import set_config_value
+    from paladin.fortify import discovery
+    from paladin.fortify.ssc import make_client, save_token
+    from paladin.importers.fortify import FortifyError
+
+    home = _home_arg(args)
+    _guard_home(home)
+    if not (home / "paladin.toml").exists():
+        init_home(home)
+    settings = load_settings(home)
+    if args.action == "login":
+        import getpass
+
+        url = args.url or input(f"URL SSC [{settings.fortify.get('url') or 'https://ssc.entreprise/ssc'}] : ").strip()
+        if url:
+            set_config_value(settings.config_path, "fortify", "url", url)
+        if args.ca:
+            set_config_value(settings.config_path, "fortify", "ca_bundle", str(Path(args.ca).resolve()))
+        token = getpass.getpass("Jeton SSC (UnifiedLoginToken ou CIToken, saisie masquée) : ").strip()
+        if token:
+            print(f"Jeton enregistré hors du dépôt : {save_token(settings, token)}")
+        print("Suite : Paladin.cmd fortify check")
+        return 0
+    if args.action == "check":
+        from paladin.fortify.check import STATE_BLOCKED, run_check, write_report
+
+        rep = run_check(settings, sample_app=args.app)
+        for ch in rep.checks:
+            print(f"[{ch.status.value:5}] {ch.area}/{ch.name} : {ch.detail}")
+            if ch.action and ch.status.value != "OK":
+                print(f"        → {ch.action}")
+        md, _js = write_report(settings, rep)
+        readiness.record(settings, "fortify_check", rep.state != STATE_BLOCKED, rep.state, report=str(md))
+        print(f"\nÉtat : {rep.state}\nRapport (sans secret) : {md}")
+        return 1 if rep.state == STATE_BLOCKED else 0
+    try:
+        client = make_client(settings)
+    except FortifyError as exc:
+        print(f"{exc}\n→ {exc.action}")
+        return 2
+    try:
+        progress = (lambda m: print(f"  … {m:60}", end="\r")) if sys.stdout.isatty() else None
+        groups = discovery.discover(client, name_filter=args.filter, progress=progress)
+    except FortifyError as exc:
+        print(f"\n{exc}\n→ {exc.action}")
+        return 2
+    print()
+    if args.action == "discover":
+        for g in groups:
+            print(f"{g.key}  — {len(g.ready)} sous-application(s) prête(s), {g.total_findings} finding(s)")
+            for a in g.apps:
+                state = (
+                    f"release {a.version_id}, {a.issue_count} finding(s)"
+                    if a.status == discovery.STATUS_OK
+                    else a.status
+                )
+                print(f"    {a.app_name:40} {state}")
+        print("\nCréer une entrée : Paladin.cmd fortify create <GROUPE> [--repo DOSSIER] [--workbook CLASSEUR.xlsx]")
+        return 0
+    from paladin.fortify.campaign import SSCCampaignError, create_campaign_from_group
+
+    group = next((g for g in groups if g.key == args.group), None)
+    if group is None:
+        print(f"Groupe inconnu : {args.group}. Groupes : {', '.join(g.key for g in groups)}")
+        return 2
+    conn = open_database(settings.db_path)
+    try:
+        cid = create_campaign_from_group(
+            settings,
+            conn,
+            group,
+            campaign_id=args.id,
+            target_workbook=Path(args.workbook) if args.workbook else None,
+            repo_paths=[Path(r) for r in args.repo or []],
+        )
+    except SSCCampaignError as exc:
+        print(f"Campagne non créée : {exc}")
+        return 2
+    finally:
+        conn.close()
+    print(f"Campagne « {cid} » créée : {len(group.ready)} sous-application(s), {group.total_findings} finding(s).")
+    if group.blocked:
+        print(f"Exclues (sans release unique) : {', '.join(a.app_name for a in group.blocked)}")
+    print(f"Suite : Paladin.cmd import --campaign {cid}   (ou bouton « Importer » dans l'interface)")
+    return 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     home = _home_arg(args)
     settings = load_settings(home)
@@ -327,6 +465,8 @@ def print_import_report(report) -> None:
             print(f"      NON RECONNU {part['locator']} : {part['reason']}")
         for part in src.ignored:
             print(f"      ignoré (profil) {part['locator']} : {part['reason']}")
+    for note in report.notes:
+        print(f"  · {note}")
     if report.error:
         print(f"  ! Collecte interrompue : {report.error['message']}\n    → {report.error['action']}")
     if report.blocked:
@@ -518,7 +658,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--profile", help="Profil MD (heading-kv-v1, table-v1).")
     p.set_defaults(func=cmd_inspect)
     p = add("agent", "Agent OpenCode : setup, enqueue, run, status.")
-    p.add_argument("action", choices=["setup", "enqueue", "run", "status", "probe"])
+    p.add_argument("action", choices=["connect", "setup", "enqueue", "run", "status", "probe"])
     p.add_argument("--campaign", default="demo")
     p.add_argument("--model", help="fournisseur/modèle, ex. openrouter/z-ai/glm-5.3")
     p.add_argument("--max-jobs", type=int, default=3)
@@ -528,6 +668,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--enqueue", action="store_true", help="Mettre en file les findings sans proposition avant de lancer."
     )
     p.set_defaults(func=cmd_agent)
+    p = add("fortify", "Fortify SSC : login, check, discover, create.")
+    p.add_argument("action", choices=["login", "check", "discover", "create"])
+    p.add_argument("group", nargs="?", help="Groupe d'applications (préfixe APP) pour « create ».")
+    p.add_argument("--url")
+    p.add_argument("--ca", help="Certificat .pem de l'autorité d'entreprise.")
+    p.add_argument("--app", help="Application d'échantillon pour « check ».")
+    p.add_argument("--filter", help="Ne garder que les applications contenant ce texte.")
+    p.add_argument("--id", help="Identifiant de campagne (défaut : dérivé du groupe).")
+    p.add_argument("--workbook", help="Classeur cible existant (onglet Fortify) ; vide = classeur généré.")
+    p.add_argument("--repo", action="append", help="Dossier d'un dépôt de code (répétable).")
+    p.set_defaults(func=cmd_fortify)
     p = add("profile", "Profils d'entrée : lister, afficher, valider.")
     p.add_argument("action", choices=["list", "show", "validate"])
     p.add_argument("profile_id", nargs="?")

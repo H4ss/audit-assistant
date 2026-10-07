@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Applications SSC — Paladin{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Applications Fortify SSC</h1>
+  <p>Les applications sont regroupées par préfixe : <code>APP.SUBAPP1</code> + <code>APP.SUBAPP2</code> = <strong>une entrée</strong> ; <code>APP2.*</code> = une autre entrée. Pour chaque sous-application, seule la version nommée exactement <code>release</code> est utilisée.</p>
+  <form method="post" action="/fortify/discover" class="row wrap">
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="search" name="filter" placeholder="filtrer (ex. SHOP)" value="{{ cached.filter if cached else '' }}">
+    <button class="btn primary">{{ 'Rafraîchir' if cached else 'Découvrir les applications' }}</button>
+    {% if cached %}<span class="muted small">Dernière découverte : {{ cached.at[:16].replace('T', ' ') }}</span>{% endif %}
+  </form>
+</section>
+{% if cached %}
+<form method="post" action="/fortify/create">
+  <input type="hidden" name="token" value="{{ token }}">
+  <section class="panel">
+    <table class="table">
+      <thead><tr><th></th><th>Groupe / sous-application</th><th>Version release</th><th>Findings</th></tr></thead>
+      {% for g in cached.groups %}
+      {% set ready = g.apps|selectattr('status', 'equalto', 'ok')|list %}
+      <tr>
+        <td><input type="checkbox" name="group" value="{{ g.key }}" {{ 'disabled' if not ready }}></td>
+        <td><strong>{{ g.key }}</strong> <span class="muted small">{{ ready|length }} / {{ g.apps|length }} prête(s)</span></td>
+        <td></td><td><strong>{{ g.total_findings }}</strong></td>
+      </tr>
+      {% for a in g.apps %}
+      <tr class="{{ '' if a.status == 'ok' else 'muted' }}">
+        <td></td><td style="padding-left:1.5rem">{{ a.app_name }}</td>
+        <td>{% if a.status == 'ok' %}<code>{{ a.version_id }}</code>{% else %}<span class="badge warn">{{ a.status }}</span>{% if a.other_versions %} <span class="small">(versions : {{ a.other_versions|join(', ') }})</span>{% endif %}{% endif %}</td>
+        <td>{{ a.issue_count if a.issue_count is not none else '—' }}</td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </table>
+    <p class="small muted">Une sous-application sans « release » unique est exclue et listée ; aucune autre version n'est choisie à sa place.</p>
+  </section>
+  <section class="panel">
+    <h2>Créer les entrées cochées</h2>
+    <label>Dossiers des dépôts de code (un par ligne) — les racines du scanner sont déduites automatiquement
+      <textarea name="repos" rows="3" placeholder="C:\Code\shop-api&#10;C:\Code\billing-lib"></textarea></label>
+    <label>Classeur cible existant (onglet « Fortify ») — laisser vide pour en générer un
+      <input type="text" name="workbook" placeholder="C:\Audits\audit.xlsx"></label>
+    <button class="btn primary">Créer</button>
+  </section>
+</form>
+{% endif %}
+{% endblock %}

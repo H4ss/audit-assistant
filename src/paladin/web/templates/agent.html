@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Connexion de l'agent — Paladin{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Connexion de l'agent (OpenCode + votre modèle)</h1>
+  <p>Paladin utilise <strong>l'OpenCode déjà configuré sur ce poste</strong> et ses fournisseurs : aucune clé n'est saisie ici.</p>
+  <ol>
+    <li>Dans OpenCode, connecter une fois le fournisseur de l'entreprise : <code>/connect</code> ou <code>opencode auth login</code>.</li>
+    <li>Ici : « Détecter mes modèles », choisir le GLM, puis « Tester et utiliser » (une question d'une ligne).</li>
+    <li>« Sondage de sécurité » : vérifie que l'agent n'a accès qu'aux outils Paladin.</li>
+  </ol>
+  <p>Modèle actuel : {% if current %}<code>{{ current }}</code>{% else %}<span class="badge warn">non choisi</span> (défaut <code>{{ default }}</code>){% endif %}</p>
+</section>
+
+<section class="panel">
+  <h2>Choisir le modèle</h2>
+  {% if info is none %}
+    <a class="btn primary" href="/agent?detect=1">Détecter mes modèles</a>
+    <span class="muted small">Interroge OpenCode localement (quelques secondes).</span>
+  {% elif info.error %}
+    <div class="callout warn">{{ info.error }} → Installer OpenCode (opencode.ai), puis recharger cette page.</div>
+  {% else %}
+    <p class="muted small">OpenCode {{ info.version }} — {{ info.models|length }} modèle(s) connecté(s).</p>
+    <form method="post" action="/agent/connect">
+      <input type="hidden" name="token" value="{{ token }}">
+      {% if info.models %}
+      <select name="model">
+        {% for m in info.models %}<option value="{{ m.id }}" {{ 'selected' if m.id == current or (not current and loop.first) }}>{{ m.id }} — {{ m.name }}{{ ' (défaut OpenCode)' if m.id == info.default_model }}</option>{% endfor %}
+      </select>
+      {% else %}
+      <div class="callout warn">Aucun fournisseur connecté dans OpenCode. Le connecter (<code>/connect</code> dans OpenCode), ou saisir le modèle à la main.</div>
+      {% endif %}
+      <p><input type="text" name="custom" placeholder="ou saisir fournisseur/modèle, ex. openrouter/z-ai/glm-5.3"></p>
+      <button class="btn primary">Tester et utiliser</button>
+    </form>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Sondage de sécurité</h2>
+  <p class="muted small">Demande à l'agent d'utiliser le shell, des fichiers, le réseau et l'outil execute, puis vérifie dans la trace d'OpenCode qu'aucun n'a été exécuté. À refaire après chaque mise à jour d'OpenCode.</p>
+  <form method="post" action="/agent/probe"><input type="hidden" name="token" value="{{ token }}"><button class="btn">Lancer le sondage</button></form>
+</section>
+{% if campaigns %}<p><a href="/c/{{ campaigns[0].id }}">← Retour à la campagne</a></p>{% endif %}
+{% endblock %}

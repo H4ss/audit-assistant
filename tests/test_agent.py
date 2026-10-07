@@ -233,12 +233,9 @@ def test_runner_releases_job_when_session_ends_without_proposal(api, monkeypatch
     assert jobs.status(conn, "demo")["pending"] == 1  # remis en file, bail libéré
 
 
-def test_runner_respects_budget_and_requires_key(api, monkeypatch):
+def test_runner_respects_budget_with_provider_measure(api, monkeypatch):
     conn = api["conn"]
     jobs.enqueue_analysis(conn, "demo")
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    with pytest.raises(runner.AgentRunError):
-        runner.run_agent(api["settings"], conn, "demo", max_jobs=1, budget_usd=1.0, opencode_cmd=FAKE)
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
     usage = iter([0.0, 0.08, 0.16])
     monkeypatch.setattr(runner, "openrouter_usage", lambda key: next(usage))
@@ -247,6 +244,17 @@ def test_runner_respects_budget_and_requires_key(api, monkeypatch):
     )
     assert len(report.outcomes) == 1 and report.spent_usd == pytest.approx(0.08)  # mesuré chez le fournisseur
     assert "plafond" in report.stopped
+
+
+def test_runner_works_without_provider_key(api, monkeypatch):
+    """Plug and play : l'authentification du modèle est celle de l'OpenCode du poste."""
+    conn = api["conn"]
+    jobs.enqueue_analysis(conn, "demo", [finding_by_source(conn, "TB-0001")["id"]])
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    report = runner.run_agent(
+        api["settings"], conn, "demo", max_jobs=1, budget_usd=1.0, opencode_cmd=FAKE, printer=lambda s: None
+    )
+    assert report.outcomes[0].status == "proposition reçue" and report.cost_source == "sortie OpenCode"
 
 
 def test_runner_uses_client_cost_when_provider_counter_lags(api, monkeypatch):

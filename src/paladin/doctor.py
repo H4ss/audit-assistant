@@ -137,7 +137,7 @@ def check_agent(settings: Settings) -> Check:
 
     model = settings.agent.get("model") or DEFAULT_MODEL
     try:
-        provider, _ = model_parts(model)
+        model_parts(model)
     except ValueError as exc:
         return Check("agent", "modèle", Status.BLOCK, str(exc), "Corriger [agent] model dans paladin.toml.")
     if not (workspace_dir(settings) / "opencode.json").exists():
@@ -148,13 +148,13 @@ def check_agent(settings: Settings) -> Check:
             "Espace de l'agent non préparé",
             "Lancer `paladin agent setup` (la configuration OpenCode globale n'est pas modifiée).",
         )
-    if provider == "openrouter" and not os.environ.get("OPENROUTER_API_KEY"):
+    if not settings.agent.get("model"):
         return Check(
             "agent",
-            "clé fournisseur",
+            "modèle",
             Status.WARN,
-            f"Modèle {model} : OPENROUTER_API_KEY absente",
-            "Définir la variable d'environnement avant `paladin agent run` (jamais dans un fichier du dépôt).",
+            f"Modèle par défaut {model} (non choisi explicitement)",
+            "Lancer `Paladin.cmd agent connect` pour choisir et tester le modèle de votre OpenCode.",
         )
     return Check("agent", "espace OpenCode", Status.OK, f"Modèle {model} — espace {workspace_dir(settings)}")
 
