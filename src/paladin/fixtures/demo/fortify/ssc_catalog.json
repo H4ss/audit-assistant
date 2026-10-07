@@ -1,0 +1,19 @@
+{
+  "_synthetic": "Catalogue SSC FICTIF pour la démo et les tests (forme inspirée de l'API SSC v1, non vérifiée sur une instance réelle).",
+  "applications": [
+    {"id": 601, "name": "SHOP.API", "versions": [
+      {"id": 10042, "name": "release", "issues": "fixture:10042"},
+      {"id": 10043, "name": "dev", "issues": "fixture:10043"}]},
+    {"id": 602, "name": "SHOP.BILLING", "versions": [
+      {"id": 10052, "name": "release", "issues": "generate:3:billing-lib/billing/tokens.py"}]},
+    {"id": 603, "name": "CRM.CORE", "versions": [
+      {"id": 20101, "name": "release", "issues": "generate:7:crm-core/src/Main.java"}]},
+    {"id": 604, "name": "CRM.PORTAL", "versions": [
+      {"id": 20102, "name": "Release 2.1", "issues": "generate:4:crm-portal/web/index.jsp"}]},
+    {"id": 605, "name": "TWIN.APP", "versions": [
+      {"id": 30001, "name": "release", "issues": "generate:2:twin/a.py"},
+      {"id": 30002, "name": "release", "issues": "generate:5:twin/b.py"}]},
+    {"id": 606, "name": "LEGACYAPP", "versions": [
+      {"id": 40001, "name": "release", "issues": "generate:2:legacy/app.php"}]}
+  ]
+}
