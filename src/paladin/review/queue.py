@@ -11,9 +11,12 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
+from paladin import groups as groups_mod
+from paladin import rules as rules_mod
 from paladin.analysis import excerpt_for_finding, latest_analysis
 from paladin.classify import FAMILIES, ROUTE_CHECKLIST
 from paladin.contracts import ExportState, ProcessingState, ReviewState
+from paladin.review import memory
 from paladin.review.decisions import current_decision, events, get_draft
 from paladin.util import loads
 
@@ -156,6 +159,9 @@ class Card:
     divergences: list[dict[str, Any]]
     provenance: list[dict[str, Any]]
     position: tuple[int, int]
+    precedents: dict[str, Any]
+    rules: list[Any]
+    commit_alert: str | None
 
 
 def card(conn: sqlite3.Connection, campaign_id: str, finding_id: str, view: str, tool: str | None) -> Card:
@@ -209,4 +215,7 @@ def card(conn: sqlite3.Connection, campaign_id: str, finding_id: str, view: str,
         divergences=divergences,
         provenance=provenance,
         position=position(conn, campaign_id, finding_id, view, tool),
+        precedents=memory.precedents(conn, row),
+        rules=rules_mod.applicable(conn, row, row["tool_label"]),
+        commit_alert=groups_mod.commit_mismatch(conn, row),
     )
