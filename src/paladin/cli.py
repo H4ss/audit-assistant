@@ -214,6 +214,24 @@ def cmd_agent(args: argparse.Namespace) -> int:
             print(f"Version des instructions : {workspace.skill_version()}")
             print("Usage interactif : ouvrir OpenCode dans ce dossier, choisir l'agent « paladin-analyst ».")
             return 0
+        if args.action == "probe":
+            from paladin.agent.runner import AgentRunError, probe_agent
+
+            try:
+                res = probe_agent(settings, args.model)
+            except AgentRunError as exc:
+                print(f"Sondage impossible : {exc}\n→ {exc.action}")
+                return 2
+            print(f"Outils appelés par l'agent : {res.tools_used or 'aucun'}")
+            if res.ok:
+                print("OK : aucun outil hors paladin_* n'a été exécuté (shell, fichiers, réseau, execute).")
+            else:
+                print(
+                    f"ÉCHEC : outils interdits exécutés : {res.forbidden} — ne pas utiliser l'agent ;"
+                    f" journal : {res.log}"
+                )
+            print(f"Coût : {res.cost_usd or 0:.4f} $")
+            return 0 if res.ok else 1
         if args.action == "enqueue":
             print(f"{jobs.enqueue_analysis(conn, args.campaign)} finding(s) mis en file.")
             return 0
@@ -497,7 +515,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--profile", help="Profil MD (heading-kv-v1, table-v1).")
     p.set_defaults(func=cmd_inspect)
     p = add("agent", "Agent OpenCode : setup, enqueue, run, status.")
-    p.add_argument("action", choices=["setup", "enqueue", "run", "status"])
+    p.add_argument("action", choices=["setup", "enqueue", "run", "status", "probe"])
     p.add_argument("--campaign", default="demo")
     p.add_argument("--model", help="fournisseur/modèle, ex. openrouter/z-ai/glm-5.3")
     p.add_argument("--max-jobs", type=int, default=3)

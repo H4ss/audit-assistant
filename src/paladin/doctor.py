@@ -132,6 +132,33 @@ def check_opencode(settings: Settings) -> Check:
     return Check("agent", "opencode", Status.OK, f"{exe} v{version} — modèle demandé {model}, fournisseur {provider}")
 
 
+def check_agent(settings: Settings) -> Check:
+    from paladin.agent.workspace import DEFAULT_MODEL, model_parts, workspace_dir
+
+    model = settings.agent.get("model") or DEFAULT_MODEL
+    try:
+        provider, _ = model_parts(model)
+    except ValueError as exc:
+        return Check("agent", "modèle", Status.BLOCK, str(exc), "Corriger [agent] model dans paladin.toml.")
+    if not (workspace_dir(settings) / "opencode.json").exists():
+        return Check(
+            "agent",
+            "espace OpenCode",
+            Status.WARN,
+            "Espace de l'agent non préparé",
+            "Lancer `paladin agent setup` (la configuration OpenCode globale n'est pas modifiée).",
+        )
+    if provider == "openrouter" and not os.environ.get("OPENROUTER_API_KEY"):
+        return Check(
+            "agent",
+            "clé fournisseur",
+            Status.WARN,
+            f"Modèle {model} : OPENROUTER_API_KEY absente",
+            "Définir la variable d'environnement avant `paladin agent run` (jamais dans un fichier du dépôt).",
+        )
+    return Check("agent", "espace OpenCode", Status.OK, f"Modèle {model} — espace {workspace_dir(settings)}")
+
+
 def check_fortify(settings: Settings) -> Check:
     url = settings.fortify.get("url", "")
     if not url:
@@ -164,7 +191,7 @@ def run_checks(settings: Settings) -> list[Check]:
     checks = [check_python(), check_os(), check_home(settings)]
     if checks[-1].status != Status.BLOCK:
         checks.append(check_database(settings))
-    checks += [check_opencode(settings), check_fortify(settings)]
+    checks += [check_opencode(settings), check_agent(settings), check_fortify(settings)]
     return checks
 
 

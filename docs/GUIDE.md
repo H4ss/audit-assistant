@@ -33,6 +33,7 @@ py -3.14 -m venv .venv
 | `python -m paladin inspect <fichier>` | Voir comment Paladin lirait un rapport (xlsx, csv, md, sarif), sans rien importer |
 | `python -m paladin profile list\|show\|validate <id>` | Valider en ligne de commande un mapping proposé |
 | `python -m paladin export [--final]` | Écrire l'Excel (aussi possible depuis l'interface) |
+| `python -m paladin agent setup\|enqueue\|run\|status` | Agent d'analyse OpenCode (voir plus bas) |
 | `python -m paladin doctor` | Diagnostic : Python, dossiers, base, OpenCode, Fortify |
 | `python -m paladin status` | Lister les campagnes |
 
@@ -79,6 +80,26 @@ Un contenu non reconnu (ligne de tableau mal formée, section inconnue) est **si
 - Une valeur saisie à la main dans l'Excel n'est jamais écrasée sans autorisation explicite : la ligne est signalée « bloquée ».
 - Chaque export produit un manifeste qui relie chaque cellule modifiée à sa décision.
 
+## Agent d'analyse (OpenCode + GLM)
+
+L'agent **propose** une analyse argumentée pour chaque finding. Vous restez seul à décider.
+
+1. **Préparer** (une fois) : `Paladin.cmd agent setup`. Cela crée un espace OpenCode dédié dans le dossier de données (`<données>\agent`), avec les outils Paladin, l'agent `paladin-analyst` et la méthode `paladin-appsec-triage`. Votre configuration OpenCode globale **n'est pas modifiée**.
+2. **Choisir le modèle** dans `paladin.toml`, section `[agent]` : `model = "openrouter/z-ai/glm-5.3"` par défaut. Sur le poste de travail, mettre le fournisseur et le modèle de l'entreprise. Préférer une version épinglée à un alias comme `glm-latest`.
+3. **Fournir la clé** par variable d'environnement, jamais dans un fichier du dépôt. Par exemple `set OPENROUTER_API_KEY=...` (cmd) ou `$env:OPENROUTER_API_KEY="..."` (PowerShell).
+4. **Mettre en file** : bouton « Mettre en file les findings sans proposition » dans le tableau de bord, ou `Paladin.cmd agent enqueue`.
+5. **Lancer** : `Paladin.cmd agent run --max-jobs 5 --budget 1.5`.
+
+Pendant l'exécution :
+
+- Chaque job est une session OpenCode distincte : un finding à la fois, avec un contexte propre.
+- L'agent n'a **que** les outils Paladin : réclamer un job, lire le contexte, lire et chercher du code dans les dépôts autorisés, soumettre. Le shell, l'édition, le web et la lecture hors dépôts lui sont refusés.
+- Les propositions arrivent dans « Proposition prête ». Si vous êtes sur la fiche concernée, un bandeau vous le signale sans changer la page.
+- **Budget** : la dépense est mesurée chez le fournisseur (OpenRouter : consommation de la clé avant et après chaque job). L'exécution s'arrête avant de dépasser `--budget`. Le coût par job s'affiche dans le tableau de bord.
+- Un agent interrompu (crash, timeout) libère son job, qui sera repris. Aucune proposition n'est dupliquée.
+
+Usage interactif : ouvrir OpenCode dans le dossier de l'agent et choisir l'agent `paladin-analyst`. Paladin doit être lancé (`Paladin.cmd`) pour que les outils le joignent.
+
 ## Dépannage
 
 | Symptôme | Action |
@@ -87,5 +108,7 @@ Un contenu non reconnu (ligne de tableau mal formée, section inconnue) est **si
 | Port 8765 occupé | Paladin prend automatiquement le port suivant libre et affiche l'URL. |
 | PowerShell refuse `Activate.ps1` | Utiliser `Paladin.cmd`, ou appeler `.\.venv\Scripts\python.exe` directement. |
 | « Classeur contenant des éléments non préservés » | Le classeur contient macros, graphiques, images ou tableaux croisés. Exporter vers un classeur sans ces éléments. |
+| Agent : « Agent not found » | Lancer via `Paladin.cmd agent run` (qui place OpenCode dans le bon dossier), ou ouvrir OpenCode depuis le dossier `agent`. |
+| Agent : « OPENROUTER_API_KEY absente » | Définir la variable dans la fenêtre avant de lancer (voir « Agent d'analyse »). |
 | « Révision périmée » | La fiche a changé (double clic ou autre onglet) : la page est rechargée et aucune décision n'est dupliquée. |
 | Source « partielle » | Ouvrir le détail dans « Sources » : les parties non reconnues sont listées avec leur emplacement. |
