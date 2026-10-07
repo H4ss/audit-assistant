@@ -40,13 +40,17 @@ def _iso(dt: datetime) -> str:
 
 
 def enqueue_analysis(conn: sqlite3.Connection, campaign_id: str, finding_ids: list[str] | None = None) -> int:
-    """Crée un job d'analyse pour chaque finding à revoir sans job actif ni proposition courante."""
+    """Crée un job d'analyse pour chaque finding à revoir sans job actif ni proposition courante.
+
+    Les analyses à l'aveugle du jeu de référence passent par `calibration.enqueue_blind`.
+    """
     sql = (
         "SELECT f.id, f.revision FROM finding f WHERE f.campaign_id = ?"
         f" AND f.review_state IN ('{ReviewState.TO_REVIEW}', '{ReviewState.REEXAM_REQUIRED}')"
         " AND NOT EXISTS (SELECT 1 FROM job j WHERE j.finding_id = f.id AND j.kind = 'analysis'"
         "   AND j.status IN ('pending', 'claimed'))"
-        " AND NOT EXISTS (SELECT 1 FROM analysis a WHERE a.finding_id = f.id AND a.input_revision = f.revision)"
+        " AND NOT EXISTS (SELECT 1 FROM analysis a WHERE a.finding_id = f.id AND a.input_revision = f.revision"
+        "   AND a.is_blind = 0)"
     )
     params: list[Any] = [campaign_id]
     if finding_ids is not None:
@@ -119,13 +123,15 @@ def claim(
         expires = now + timedelta(seconds=lease_seconds)
         conn.execute(
             "UPDATE job SET status = 'claimed', lease_owner = ?, lease_token = ?, lease_expires_at = ?,"
-            " attempt = attempt + 1, model_requested = COALESCE(?, model_requested), updated_at = ? WHERE id = ?",
-            (worker, token, _iso(expires), model_requested, utcnow(), row["id"]),
+            " attempt = attempt + 1, model_requested = COALESCE(?, model_requested), updated_at = ?,"
+            " started_at = COALESCE(started_at, ?) WHERE id = ?",
+            (worker, token, _iso(expires), model_requested, utcnow(), utcnow(), row["id"]),
         )
-        conn.execute(
-            "UPDATE finding SET processing_state = ?, updated_at = ? WHERE id = ?",
-            (ProcessingState.ANALYZING.value, utcnow(), row["finding_id"]),
-        )
+        if not row["blind"]:  # une analyse à l'aveugle ne change pas l'état d'un finding déjà décidé
+            conn.execute(
+                "UPDATE finding SET processing_state = ?, updated_at = ? WHERE id = ?",
+                (ProcessingState.ANALYZING.value, utcnow(), row["finding_id"]),
+            )
         job = dict(conn.execute("SELECT * FROM job WHERE id = ?", (row["id"],)).fetchone())
     return job
 
@@ -162,9 +168,9 @@ def heartbeat(
 
 def complete(conn: sqlite3.Connection, job_id: str) -> None:
     conn.execute(
-        "UPDATE job SET status = 'done', lease_token = NULL, lease_expires_at = NULL, error = NULL, updated_at = ?"
-        " WHERE id = ?",
-        (utcnow(), job_id),
+        "UPDATE job SET status = 'done', lease_token = NULL, lease_expires_at = NULL, error = NULL, updated_at = ?,"
+        " finished_at = ? WHERE id = ?",
+        (utcnow(), utcnow(), job_id),
     )
 
 
@@ -184,7 +190,8 @@ def fail(conn: sqlite3.Connection, job_id: str, lease_token: str, reason: str) -
             (status.value, reason[:2000], utcnow(), job_id),
         )
         state = ProcessingState.ERROR if final else ProcessingState.PENDING
-        conn.execute("UPDATE finding SET processing_state = ? WHERE id = ?", (state.value, job["finding_id"]))
+        if not job["blind"]:
+            conn.execute("UPDATE finding SET processing_state = ? WHERE id = ?", (state.value, job["finding_id"]))
     return get_job(conn, job_id)
 
 

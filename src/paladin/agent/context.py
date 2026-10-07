@@ -4,8 +4,13 @@ L'agent ne reçoit que :
   * le finding normalisé et les détails de l'outil, marqués comme données non
     fiables (jamais des instructions) ;
   * la liste des dépôts autorisés de la campagne (noms, pas de chemins absolus) ;
-  * un extrait de code, la checklist de la route d'analyse, quelques précédents ;
+  * un extrait de code, la checklist de la route d'analyse, quelques précédents
+    (jamais pris dans le jeu de référence), les règles et conventions d'équipe ;
   * le schéma de réponse attendu.
+Les précédents montrés sont tracés (`agent_exposure`) : un finding exposé ne peut
+plus entrer dans le jeu de référence. Pour une analyse à l'aveugle, les
+commentaires de l'outil et les règles tirées de la référence sont retirés : ils
+pourraient contenir la réponse.
 La lecture et la recherche de code passent par ce module : chemins confinés aux
 dépôts autorisés, volumes bornés, aucun exécutable lancé.
 """
@@ -17,13 +22,13 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from paladin import calibration, store
 from paladin import rules as rules_mod
-from paladin import store
 from paladin.analysis import excerpt_for_finding, safe_repo_file
 from paladin.classify import FAMILIES, ROUTE_CHECKLIST
 from paladin.contracts import AgentProposal
 from paladin.review import memory
-from paladin.util import loads
+from paladin.util import loads, utcnow
 
 MAX_READ_LINES = 300
 MAX_SEARCH_RESULTS = 40
@@ -57,6 +62,20 @@ def build_context(conn: sqlite3.Connection, job: dict[str, Any]) -> dict[str, An
     route = finding["analysis_route"] or "generic"
     repos = _repos(conn, finding["campaign_id"])
     repo_name = next((n for n, r in repos.items() if r["id"] == finding["repo_id"]), None)
+    blind = bool(job.get("blind"))
+    precedents = memory.precedents(conn, finding, limit=4, include_reference=False)["items"]
+    rules = rules_mod.applicable(conn, finding, finding["tool_label"])
+    if blind:
+        rules = [r for r in rules if not _from_reference(conn, r.id, r.version)]
+    conventions_version, conventions = calibration.conventions_for_agent(conn)
+    now = utcnow()
+    conn.execute("UPDATE job SET conventions_version = ? WHERE id = ?", (conventions_version, job["id"]))
+    for p in precedents:
+        conn.execute(
+            "INSERT OR IGNORE INTO agent_exposure (finding_id, job_id, created_at)"
+            " SELECT ?, id, ? FROM job WHERE id = ?",
+            (p["id"], now, job["id"]),
+        )
     return {
         "job_id": job["id"],
         "finding_id": finding["id"],
@@ -83,7 +102,7 @@ def build_context(conn: sqlite3.Connection, job: dict[str, Any]) -> dict[str, An
             "recommendation": details.get("recommendation"),
             "trace": details.get("trace"),
             "trace_available": details.get("trace_available", False),
-            "source_comments": finding["source_comments"],
+            "source_comments": None if blind else finding["source_comments"],
         },
         "classification": {
             "family": FAMILIES[finding["family"]].label if finding["family"] in FAMILIES else None,
@@ -112,10 +131,12 @@ def build_context(conn: sqlite3.Connection, job: dict[str, Any]) -> dict[str, An
                     "verdict",
                     "comment",
                     "basis",
+                    "application_name",
                 )
             }
-            for p in memory.precedents(conn, finding, limit=3, include_reference=False)["items"]
+            for p in precedents
         ],
+        "team_conventions": conventions,
         "rules": [
             {
                 "rule_id": r.id,
@@ -126,7 +147,7 @@ def build_context(conn: sqlite3.Connection, job: dict[str, Any]) -> dict[str, An
                 "exceptions": r.exceptions,
                 "note": "Règle validée par l'analyste : vérifier que ses conditions s'appliquent vraiment à ce cas.",
             }
-            for r in rules_mod.applicable(conn, finding, finding["tool_label"])
+            for r in rules
         ],
         "response_schema": AgentProposal.model_json_schema(),
         "verdict_values": {
@@ -135,6 +156,15 @@ def build_context(conn: sqlite3.Connection, job: dict[str, Any]) -> dict[str, An
             "NEEDS_REVIEW": "preuves insuffisantes : préciser missing_information et next_action",
         },
     }
+
+
+def _from_reference(conn: sqlite3.Connection, rule_id: str, version: int) -> bool:
+    row = conn.execute(
+        "SELECT f.is_reference FROM rule r JOIN decision_event e ON e.id = r.source_decision_id"
+        " JOIN finding f ON f.id = e.finding_id WHERE r.id = ? AND r.version = ?",
+        (rule_id, version),
+    ).fetchone()
+    return bool(row and row["is_reference"])
 
 
 def _path_in_repo(normalized: str | None, repo_name: str | None) -> str | None:

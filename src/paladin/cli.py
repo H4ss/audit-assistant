@@ -448,6 +448,91 @@ def cmd_excel(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def cmd_calibration(args: argparse.Namespace) -> int:
+    """Calibration sur analyses manuelles : import, report, run (aveugle), baseline, conventions."""
+    from paladin import calibration
+    from paladin.excel import manual
+
+    _settings, conn = _open(args)
+    try:
+        if args.action == "import":
+            if not args.path:
+                print("Chemin de votre classeur requis : Paladin.cmd calibration import mes_analyses.xlsx")
+                return 2
+            plan = manual.scan(conn, args.campaign, Path(args.path), sheet=args.sheet, tool_label=args.tool)
+            print(f"Classeur : {plan.path} · onglet {plan.sheet} · en-têtes ligne {plan.header_row}")
+            for role, label in manual.ROLES.items():
+                print(f"  {label:28} {plan.column_label(role):24} {plan.reasons.get(role, '')}")
+            print("  Traduction des verdicts :")
+            for value, n in plan.value_counts.most_common():
+                print(f"    {value!r:28} ×{n:<3} → {manual.VALUE_CHOICES[plan.value_map[value]]}")
+            counts: dict[str, int] = {}
+            for it in plan.items:
+                counts[it.status] = counts.get(it.status, 0) + 1
+            for status, n in sorted(counts.items()):
+                print(f"  {status:18} {n}")
+            for it in plan.by_status("conflit", "non reconnu", "ambigu", "doublon"):
+                print(f"    ligne {it.row} : {it.status} — {it.detail}")
+            if not args.apply:
+                print("Aperçu seulement (votre classeur n'est jamais modifié). Pour corriger une colonne ou une")
+                print("traduction : page « Calibration » de l'interface. Appliquer : ajouter --apply [--role auto].")
+                return 0
+            res = manual.apply(conn, args.campaign, plan, "analyste", role=args.role)
+            print(
+                f"{len(res.imported)} analyse(s) importée(s) (lot {res.batch_id[:8]},"
+                " annulable dans « Groupes et lots »)."
+            )
+            print("  " + " · ".join(f"{k} : {v}" for k, v in res.roles.items()))
+            if res.baseline:
+                print(f"  Temps manuel : {res.baseline['minutes']} min pour {res.baseline['findings']} finding(s)")
+            return 0
+        if args.action == "run":
+            n = calibration.enqueue_blind(conn, args.campaign)
+            avg = calibration.average_cost(conn)
+            cost = f" (≈ {n * avg:.2f} $)" if avg and n else ""
+            print(
+                f"{n} analyse(s) à l'aveugle en file{cost}. Lancer : Paladin.cmd agent run --campaign {args.campaign}"
+            )
+            return 0
+        if args.action == "baseline":
+            if args.minutes is None or args.findings is None:
+                print("Usage : Paladin.cmd calibration baseline --minutes 180 --findings 22")
+                return 2
+            b = calibration.set_baseline(conn, args.campaign, args.minutes, args.findings)
+            print(f"Temps manuel de référence : {b['minutes']} min pour {b['findings']} finding(s).")
+            return 0
+        if args.action == "conventions":
+            if args.path:
+                v = calibration.save_conventions(conn, Path(args.path).read_text(encoding="utf-8"), "analyste")
+                print(f"Conventions v{v} enregistrées.")
+            cur = calibration.current_conventions(conn)
+            print(f"--- conventions v{cur['version']} ---\n{cur['text']}" if cur else "Aucune convention enregistrée.")
+            return 0
+        r = calibration.report(conn, args.campaign)
+        s = r["summary"]
+        print(f"Jeu de référence : {s['reference']} cas (dont {r['reference_tp']} TP) · exemples : {r['examples']}")
+        print(f"Conventions : {('v' + str(r['version'])) if r['version'] else 'aucune'}")
+        print(
+            f"  analysés {s['analysed']} · accord {s['agree']} · TP manqués {s['missed_tp']} · sur-signalés"
+            f" {s['overcalled']} · abstentions {s['abstained']} · références {s['refs_ok']}/{s['refs_total']}"
+        )
+        for x in r["rows"]:
+            if x["status"] != "accord":
+                print(f"    {x['status']:18} {x['source_id'][-12:]} {x['location']} — vous : {x['human_verdict']}")
+        for w in r["warnings"]:
+            print(f"  ! {w}")
+        g = calibration.time_gain(conn, args.campaign)
+        if g["manual_min"] is not None:
+            assisted = f"{g['assisted_min']} min" if g["assisted_min"] is not None else "pas encore mesurable"
+            print(f"Temps : {g['manual_min']} min/finding à la main · assisté : {assisted}")
+        return 0
+    except (manual.ManualImportError, calibration.CalibrationError) as exc:
+        print(str(exc))
+        return 2
+    finally:
+        conn.close()
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     home = _home_arg(args)
     settings = load_settings(home)
@@ -723,6 +808,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--campaign", default="demo")
     p.add_argument("--apply", action="store_true", help="Appliquer la reprise (sinon aperçu).")
     p.set_defaults(func=cmd_excel)
+    p = add("calibration", "Calibrer l'agent sur vos analyses manuelles : import, report, run, baseline, conventions.")
+    p.add_argument("action", choices=["import", "report", "run", "baseline", "conventions"])
+    p.add_argument("path", nargs="?", help="import : votre classeur .xlsx ; conventions : fichier texte.")
+    p.add_argument("--campaign", default="demo")
+    p.add_argument("--sheet", help="Onglet (défaut : celui qui correspond le mieux aux findings).")
+    p.add_argument("--tool", help="Outil des findings à rapprocher (défaut : tous).")
+    p.add_argument("--apply", action="store_true", help="Importer (sinon aperçu).")
+    p.add_argument("--role", choices=["auto", "example", "reference"], default="auto")
+    p.add_argument("--minutes", type=float, help="baseline : minutes passées à la main.")
+    p.add_argument("--findings", type=int, help="baseline : nombre de findings analysés.")
+    p.set_defaults(func=cmd_calibration)
     p = add("profile", "Profils d'entrée : lister, afficher, valider.")
     p.add_argument("action", choices=["list", "show", "validate"])
     p.add_argument("profile_id", nargs="?")

@@ -1,8 +1,9 @@
 """Mémoire consultable (section 11) et mesures du pilote (section 17).
 
 Précédents : décisions humaines sur des findings proches (même règle source, même
-fichier, même famille dans la même application), avec leurs preuves, portée et
-contradictions. Recherche d'abord par filtres SQL et texte ; pas d'index vectoriel.
+fichier, même famille dans la même application ; puis même règle dans les autres
+applications, marquées comme telles), avec leurs preuves, portée et contradictions.
+Recherche d'abord par filtres SQL et texte ; pas d'index vectoriel.
 
 Les findings du jeu de référence ne sont jamais montrés comme précédents à
 l'agent : ils servent à mesurer les régressions de ses propositions.
@@ -54,7 +55,21 @@ def precedents(
         },
     ).fetchall()
     items = [dict(r) for r in rows]
-    same_rule = {r["verdict"] for r in items if r["basis"] == "même règle"}
+    if len(items) < limit and finding["primary_rule_id"]:
+        # Analyses des premières applications : utiles pour les suivantes, toujours signalées « autre application ».
+        items += [
+            dict(r)
+            for r in conn.execute(
+                "SELECT f.id, f.source_id, f.category, f.primary_rule_id, f.normalized_path, f.line_number,"
+                " f.application_name, f.is_reference, e.verdict, e.comment, e.action, e.authority, e.created_at,"
+                " 'même règle, autre application' AS basis"
+                " FROM finding f JOIN decision_event e ON e.id = f.current_decision_id"
+                " WHERE f.campaign_id != ? AND f.primary_rule_id = ? AND e.verdict IS NOT NULL"
+                "   AND (? OR f.is_reference = 0) ORDER BY e.created_at DESC LIMIT ?",
+                (finding["campaign_id"], finding["primary_rule_id"], int(include_reference), limit - len(items)),
+            )
+        ]
+    same_rule = {r["verdict"] for r in items if r["basis"].startswith("même règle")}
     return {"items": items, "contradiction": len(same_rule) > 1}
 
 
@@ -88,9 +103,12 @@ def pilot_metrics(conn: sqlite3.Connection, campaign_id: str) -> dict[str, Any]:
     findings = conn.execute(
         "SELECT f.*, e.verdict AS d_verdict, e.action AS d_action, e.authority AS d_authority, e.comment AS d_comment,"
         " e.correction_category AS d_category,"
-        " (SELECT a.proposed_verdict FROM analysis a WHERE a.finding_id = f.id ORDER BY a.seq DESC LIMIT 1)"
-        "   AS p_verdict,"
-        " (SELECT a.is_simulated FROM analysis a WHERE a.finding_id = f.id ORDER BY a.seq DESC LIMIT 1) AS p_sim"
+        " (SELECT a.proposed_verdict FROM analysis a WHERE a.finding_id = f.id AND a.is_blind = 0"
+        "   ORDER BY a.seq DESC LIMIT 1) AS p_verdict,"
+        " (SELECT a.is_simulated FROM analysis a WHERE a.finding_id = f.id AND a.is_blind = 0"
+        "   ORDER BY a.seq DESC LIMIT 1) AS p_sim,"
+        " (SELECT a.proposed_verdict FROM analysis a WHERE a.finding_id = f.id AND a.is_blind = 1"
+        "   ORDER BY a.seq DESC LIMIT 1) AS b_verdict"
         " FROM finding f LEFT JOIN decision_event e ON e.id = f.current_decision_id WHERE f.campaign_id = ?",
         (campaign_id,),
     ).fetchall()
@@ -119,7 +137,7 @@ def pilot_metrics(conn: sqlite3.Connection, campaign_id: str) -> dict[str, Any]:
         "SELECT COUNT(*) FROM evidence e JOIN finding f ON f.id = e.finding_id WHERE f.campaign_id = ?", (campaign_id,)
     ).fetchone()[0]
     reference = [f for f in decided if f["is_reference"]]
-    reference_agree = [f for f in reference if f["p_verdict"] == f["d_verdict"]]
+    reference_agree = [f for f in reference if (f["b_verdict"] or f["p_verdict"]) == f["d_verdict"]]
     times = [
         r[0]
         for r in conn.execute(

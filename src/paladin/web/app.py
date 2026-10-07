@@ -835,18 +835,29 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.post("/c/{cid}/f/{fid}/reference")
     async def toggle_reference(request: Request, cid: str, fid: str):
+        from paladin import calibration
+
         form = await _form(request)
-        value = 1 if form.get("reference") == "1" else 0
-        conn.execute("UPDATE finding SET is_reference = ? WHERE id = ? AND campaign_id = ?", (value, fid, cid))
+        value = form.get("reference") == "1"
+        back = form.get("back") or f"/c/{cid}/f/{fid}?view={form.get('view', 'all')}"
+        if not back.startswith(f"/c/{cid}/"):
+            back = f"/c/{cid}"
+        if conn.execute("SELECT 1 FROM finding WHERE id = ? AND campaign_id = ?", (fid, cid)).fetchone() is None:
+            raise HTTPException(404, "Finding inconnu")
+        try:
+            calibration.set_role(conn, fid, value)
+        except calibration.CalibrationError as exc:
+            _flash(conn, cid, str(exc), "warn")
+            return RedirectResponse(back, status_code=303)
         _flash(
             conn,
             cid,
             "Ajouté au jeu de référence : sa décision ne sera jamais montrée à l'agent."
             if value
-            else "Retiré du jeu de référence.",
+            else "Retiré du jeu de référence : il devient un exemple, montrable à l'agent.",
             "ok",
         )
-        return RedirectResponse(f"/c/{cid}/f/{fid}?view={form.get('view', 'all')}", status_code=303)
+        return RedirectResponse(back, status_code=303)
 
     @app.get("/c/{cid}/rules", response_class=HTMLResponse)
     def rules_page(request: Request, cid: str, finding: str = ""):
@@ -1024,6 +1035,175 @@ def create_app(settings: Settings) -> FastAPI:
             counters=q.counters(conn, cid),
             flash=_pop_flash(conn, cid),
         )
+
+    # ------------------------------------------------- calibration sur analyses manuelles
+
+    def _manual_args(params: Any) -> dict[str, Any]:
+        """Lecture choisie dans l'aperçu : colonnes (`col_<rôle>`) et traductions (`vk_<n>` / `vv_<n>`)."""
+        from paladin.excel import manual
+
+        mapping = None
+        if any(k.startswith("col_") for k in params):
+            mapping = {
+                r: int(params[f"col_{r}"]) if params.get(f"col_{r}", "") not in ("", "-1") else None
+                for r in manual.ROLES
+            }
+        value_map = {
+            params[k]: params.get("vv_" + k[3:], manual.IGNORE) for k in params if k.startswith("vk_") and params[k]
+        }
+        return {
+            "sheet": params.get("sheet") or None,
+            "tool_label": params.get("tool") or None,
+            "mapping": mapping,
+            "value_map": value_map or None,
+        }
+
+    @app.get("/c/{cid}/calibration", response_class=HTMLResponse)
+    def calibration_page(request: Request, cid: str, version: int | None = None):
+        from paladin import calibration
+
+        campaign = _campaign(cid)
+        return render(
+            request,
+            "calibration.html",
+            campaign=campaign,
+            r=calibration.report(conn, cid, version),
+            gain=calibration.time_gain(conn, cid),
+            conventions=calibration.current_conventions(conn),
+            history=calibration.conventions_history(conn),
+            examples=calibration.examples_summary(conn),
+            agent=agent_jobs.status(conn, cid),
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+        )
+
+    @app.post("/c/{cid}/calibration/upload")
+    async def calibration_upload(request: Request, cid: str):
+        from paladin.excel import manual
+
+        _campaign(cid)
+        form = await request.form()
+        if form.get("token") != ui_token:
+            raise HTTPException(403, "Jeton d'interface invalide : recharger la page.")
+        upload = form.get("file")
+        if upload is None or isinstance(upload, str) or not upload.filename:
+            _flash(conn, cid, "Choisir un classeur .xlsx à déposer.", "warn")
+            return RedirectResponse(f"/c/{cid}/calibration", status_code=303)
+        path = manual.save_upload(settings.campaign_dir(cid), upload.filename, await upload.read())
+        return RedirectResponse(f"/c/{cid}/calibration/import?file={path.name}", status_code=303)
+
+    @app.get("/c/{cid}/calibration/import", response_class=HTMLResponse)
+    def calibration_preview(request: Request, cid: str, file: str):
+        from paladin.excel import manual
+
+        campaign = _campaign(cid)
+        args = _manual_args(dict(request.query_params))
+        try:
+            path = manual.stored_copy(settings.campaign_dir(cid), file)
+            plan = manual.scan(conn, cid, path, **args)
+        except manual.ManualImportError as exc:
+            _flash(conn, cid, str(exc), "warn")
+            return RedirectResponse(f"/c/{cid}/calibration", status_code=303)
+        statuses: dict[str, list] = {}
+        for it in plan.items:
+            statuses.setdefault(it.status, []).append(it)
+        return render(
+            request,
+            "manual_import.html",
+            campaign=campaign,
+            plan=plan,
+            file=file,
+            tool=args["tool_label"] or "",
+            tools=store.list_tools(conn, cid),
+            statuses=statuses,
+            ROLES=manual.ROLES,
+            VALUE_CHOICES=manual.VALUE_CHOICES,
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+        )
+
+    @app.post("/c/{cid}/calibration/import")
+    async def calibration_import(request: Request, cid: str):
+        from paladin.excel import manual
+
+        form = await _form(request)
+        try:
+            path = manual.stored_copy(settings.campaign_dir(cid), form.get("file", ""))
+            plan = manual.scan(conn, cid, path, **_manual_args(form))
+            res = manual.apply(conn, cid, plan, AUTHOR, role=form.get("role", "auto"))
+        except manual.ManualImportError as exc:
+            _flash(conn, cid, str(exc), "warn")
+            return RedirectResponse(f"/c/{cid}/calibration", status_code=303)
+        details = [f"{k} : {v}" for k, v in res.roles.items() if v]
+        if res.baseline:
+            details.append(
+                f"Temps manuel enregistré : {res.baseline['minutes']} min pour {res.baseline['findings']} finding(s)"
+            )
+        conflicts = plan.by_status("conflit")
+        if conflicts:
+            details.append(f"{len(conflicts)} conflit(s) : la décision Paladin est conservée")
+        _flash(
+            conn,
+            cid,
+            f"{len(res.imported)} analyse(s) manuelle(s) importée(s) (lot {res.batch_id[:8]}, annulable depuis"
+            " « Groupes et lots »). Votre classeur n'a pas été modifié.",
+            "ok",
+            details,
+        )
+        return RedirectResponse(f"/c/{cid}/calibration", status_code=303)
+
+    @app.post("/c/{cid}/calibration/resplit")
+    async def calibration_resplit(request: Request, cid: str):
+        from paladin import calibration
+
+        await _form(request)
+        roles = calibration.resplit(conn, cid)
+        _flash(conn, cid, "Nouvelle répartition exemples / référence.", "ok", [f"{k} : {v}" for k, v in roles.items()])
+        return RedirectResponse(f"/c/{cid}/calibration", status_code=303)
+
+    @app.post("/c/{cid}/calibration/conventions")
+    async def calibration_conventions(request: Request, cid: str):
+        from paladin import calibration
+
+        form = await _form(request)
+        try:
+            v = calibration.save_conventions(conn, form.get("text", ""), AUTHOR, form.get("note", ""))
+        except calibration.CalibrationError as exc:
+            _flash(conn, cid, str(exc), "warn")
+        else:
+            _flash(conn, cid, f"Conventions v{v} enregistrées : l'agent les reçoit dès sa prochaine analyse.", "ok")
+        return RedirectResponse(f"/c/{cid}/calibration#conventions", status_code=303)
+
+    @app.post("/c/{cid}/calibration/blind")
+    async def calibration_blind(request: Request, cid: str):
+        from paladin import calibration
+
+        await _form(request)
+        n = calibration.enqueue_blind(conn, cid)
+        _flash(
+            conn,
+            cid,
+            f"{n} analyse(s) à l'aveugle en file. Lancer l'agent (page « Agent » ou `Paladin.cmd agent run`)."
+            if n
+            else "Rien à mettre en file : toute la référence est déjà analysée avec ces conventions.",
+            "ok" if n else "info",
+        )
+        return RedirectResponse(f"/c/{cid}/calibration", status_code=303)
+
+    @app.post("/c/{cid}/calibration/baseline")
+    async def calibration_baseline(request: Request, cid: str):
+        from paladin import calibration
+
+        form = await _form(request)
+        try:
+            calibration.set_baseline(
+                conn, cid, float(form.get("minutes", "0").replace(",", ".")), int(form.get("findings", "0"))
+            )
+        except (ValueError, calibration.CalibrationError):
+            _flash(conn, cid, "Indiquer un temps (minutes) et un nombre de findings positifs.", "warn")
+        else:
+            _flash(conn, cid, "Temps manuel de référence enregistré.", "ok")
+        return RedirectResponse(f"/c/{cid}/calibration#temps", status_code=303)
 
     # ------------------------------------------------- classeur cible et reprise
 

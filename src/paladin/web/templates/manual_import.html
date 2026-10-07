@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Import des analyses manuelles — {{ campaign.name }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Importer mes analyses manuelles</h1>
+  <p>Classeur : <code>{{ plan.path.name }}</code> · onglet <b>{{ plan.sheet }}</b> · en-têtes ligne {{ plan.header_row }}{% if plan.profile_reused %} · <span class="badge ok">lecture enregistrée réutilisée</span>{% endif %}</p>
+  <p class="muted small">Votre classeur n'est pas modifié. Vérifiez la lecture des colonnes et la traduction des verdicts, cliquez sur « Actualiser l'aperçu » si vous changez quelque chose, puis importez.</p>
+  <form method="get" action="/c/{{ campaign.id }}/calibration/import" id="lecture">
+    <input type="hidden" name="file" value="{{ file }}">
+    <div class="grid">
+      <label class="tile">Onglet
+        <select name="sheet">{% for n in plan.sheets %}<option{% if n == plan.sheet %} selected{% endif %}>{{ n }}</option>{% endfor %}</select></label>
+      <label class="tile">Outil des findings
+        <select name="tool"><option value="">tous</option>{% for t in tools %}<option{% if t.label == tool %} selected{% endif %}>{{ t.label }}</option>{% endfor %}</select></label>
+      {% for role, label in ROLES.items() %}
+      <label class="tile">{{ label }}
+        <select name="col_{{ role }}"><option value="-1">— aucune —</option>{% for h in plan.headers %}<option value="{{ loop.index0 }}"{% if plan.mapping[role] == loop.index0 %} selected{% endif %}>{{ h }}</option>{% endfor %}</select>
+        <span class="small muted">{{ plan.reasons.get(role, 'non trouvée' if role in ('key', 'verdict') else '') }}</span></label>
+      {% endfor %}
+    </div>
+    {% if plan.value_counts %}
+    <h2>Traduction des verdicts</h2>
+    <table class="table small">
+      <thead><tr><th>Valeur dans votre classeur</th><th>Lignes</th><th>Devient</th></tr></thead>
+      {% for value, n in plan.value_counts.most_common() %}
+      <tr><td><code>{{ value }}</code></td><td>{{ n }}</td><td>
+        <input type="hidden" name="vk_{{ loop.index }}" value="{{ value }}">
+        <select name="vv_{{ loop.index }}">{% for k, lbl in VALUE_CHOICES.items() %}<option value="{{ k }}"{% if plan.value_map[value] == k %} selected{% endif %}>{{ lbl }}</option>{% endfor %}</select></td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    <button class="btn" style="margin-top:.6rem">Actualiser l'aperçu</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Aperçu</h2>
+  <div class="grid">
+    {% for st, label in [('importable', 'à importer'), ('identique', 'déjà identiques'), ('conflit', 'conflits'), ('non reconnu', 'verdict à traduire'), ('commentaire seul', 'commentaire sans verdict'), ('ambigu', 'rapprochement ambigu'), ('doublon', 'doublons'), ('sans finding', 'sans finding')] %}
+    <div class="tile"><strong>{{ statuses.get(st, [])|length }}</strong> {{ label }}</div>
+    {% endfor %}
+  </div>
+  {% if plan.minutes_total is not none %}<p>Temps noté dans le classeur : <b>{{ plan.minutes_total|round|int }} min</b> — enregistré comme temps manuel de référence.</p>{% endif %}
+  {% if plan.importable %}
+  <form method="post" action="/c/{{ campaign.id }}/calibration/import" class="row wrap" style="margin-top:1rem">
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="hidden" name="file" value="{{ file }}">
+    <input type="hidden" name="sheet" value="{{ plan.sheet }}">
+    <input type="hidden" name="tool" value="{{ tool }}">
+    {% for role in ROLES %}<input type="hidden" name="col_{{ role }}" value="{{ plan.mapping[role] if plan.mapping[role] is not none else -1 }}">{% endfor %}
+    {% for value, target in plan.value_map.items() %}<input type="hidden" name="vk_{{ loop.index }}" value="{{ value }}"><input type="hidden" name="vv_{{ loop.index }}" value="{{ target }}">{% endfor %}
+    <label>Ces analyses servent de
+      <select name="role">
+        <option value="auto" selected>répartition automatique : ~⅓ référence, ~⅔ exemples</option>
+        <option value="reference">jeu de référence uniquement (mesure)</option>
+        <option value="example">exemples uniquement (montrés à l'agent)</option>
+      </select></label>
+    <button class="btn primary" data-confirm="Importer {{ plan.importable|length }} analyse(s) manuelle(s) ?">Importer {{ plan.importable|length }} analyse(s)</button>
+  </form>
+  {% else %}<p class="callout">Rien à importer pour l'instant : vérifiez la colonne d'identifiant (ou fichier + ligne) et la traduction des verdicts.</p>{% endif %}
+</section>
+
+<section class="panel">
+  <h2>Détail par ligne</h2>
+  <table class="table small">
+    <thead><tr><th>Ligne</th><th>Finding</th><th>Verdict</th><th>Commentaire</th><th>Statut</th><th>Détail</th></tr></thead>
+    {% for it in plan.items %}
+    <tr><td>{{ it.row }}</td>
+      <td>{% if it.source_id %}<code>{{ it.source_id[-12:] }}</code> <span class="muted">({{ it.matched_by }})</span>{% else %}<code>{{ it.key or ((it.file or '?') ~ ':' ~ (it.line or '?')) }}</code>{% endif %}</td>
+      <td>{{ it.raw_result or '' }}</td><td>{{ it.comment or '' }}</td>
+      <td><span class="badge {{ 'ok' if it.status == 'importable' else ('warn' if it.status in ('conflit', 'non reconnu', 'ambigu', 'doublon') else '') }}">{{ it.status }}</span></td>
+      <td>{{ it.detail }}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">Aucune ligne analysée trouvée dans cet onglet.</td></tr>{% endfor %}
+  </table>
+</section>
+{% endblock %}

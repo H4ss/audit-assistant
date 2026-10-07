@@ -46,7 +46,9 @@
 | `matching.py` | Candidats, décisions de lien, lots, projections `Found in` / `criticality in` | P5 |
 | `excel/sheets.py`, `excel/template.py` | Schéma d'onglet pour un nouvel outil, classeur neuf | P5 / P4 |
 | `rules.py`, `groups.py` | Règles réutilisables, groupes comparés membre par membre, lots | P6 |
-| `review/memory.py` | Précédents, recherche, mesures du pilote | P6 |
+| `review/memory.py` | Précédents (y compris autres applications), recherche, mesures du pilote | P6 → P8 |
+| `excel/manual.py` | Import des analyses manuelles depuis le classeur personnel de l'analyste | P8 |
+| `calibration.py` | Exemples / référence, analyse à l'aveugle, rapport, conventions d'équipe, temps manuel | P8 |
 
 ## Invariants
 
@@ -58,6 +60,7 @@
 6. Identifiant interne ≠ numéro de ligne Excel. Identifiant source contextualisé par outil / application / version. Collision d'empreinte exposée, jamais fusionnée.
 7. Valeur absente = vide et signalée ; rien n'est inventé (ligne 0, CWE, catégorie, version).
 8. Données métier et secrets hors du dépôt.
+9. Le jeu de référence n'est jamais montré à l'agent ; une analyse à l'aveugle ne modifie ni décision ni export.
 
 ## Dépendances
 

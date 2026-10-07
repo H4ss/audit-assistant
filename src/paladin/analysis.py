@@ -95,8 +95,14 @@ def store_proposal(
     skill_version: str | None = None,
     context_version: str | None = None,
     is_simulated: bool = False,
+    is_blind: bool = False,
+    conventions_version: int | None = None,
 ) -> dict[str, Any]:
-    """Enregistre une proposition validée par schéma ; vérifie révision et références."""
+    """Enregistre une proposition validée par schéma ; vérifie révision et références.
+
+    Une proposition à l'aveugle (jeu de référence) est conservée pour la calibration : elle ne change ni la
+    décision humaine ni l'état de traitement du finding.
+    """
     with store.transaction(conn):
         finding = conn.execute("SELECT * FROM finding WHERE id = ?", (finding_id,)).fetchone()
         if finding is None:
@@ -124,8 +130,8 @@ def store_proposal(
             " suggested_comment, discussion_required, discussion_reason, payload_json, validation_json,"
             " model_requested,"
             " model_provider, model_resolved, skill_version, software_version, context_version, is_simulated,"
-            " created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " created_at, is_blind, conventions_version)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 aid,
                 finding_id,
@@ -147,6 +153,8 @@ def store_proposal(
                 context_version,
                 int(is_simulated),
                 utcnow(),
+                int(is_blind),
+                conventions_version,
             ),
         )
         for ev, status, actual in checked:
@@ -171,10 +179,11 @@ def store_proposal(
                     utcnow(),
                 ),
             )
-        conn.execute(
-            "UPDATE finding SET processing_state = ?, updated_at = ? WHERE id = ?",
-            (ProcessingState.PROPOSAL_READY.value, utcnow(), finding_id),
-        )
+        if not is_blind:
+            conn.execute(
+                "UPDATE finding SET processing_state = ?, updated_at = ? WHERE id = ?",
+                (ProcessingState.PROPOSAL_READY.value, utcnow(), finding_id),
+            )
     return latest_analysis(conn, finding_id)  # type: ignore[return-value]
 
 

@@ -40,6 +40,18 @@ Guide détaillé, liste des prérequis et dépannage : [docs/PC_DE_TRAVAIL.md](d
 2. **Revue** : cliquer sur « Commencer la revue ». Pour chaque finding : `T` ou `N` pour le verdict, `A` pour valider et passer au suivant. `D` donne « security appetite to be discussed », `I` met « À investiguer », `U` annule. Appuyer sur `?` affiche tous les raccourcis.
 3. **Excel** : cliquer sur « Exporter ». Les colonnes et les valeurs sont en anglais. Un classeur **déjà renseigné** par une analyse précédente peut servir de cible : ses valeurs ne sont jamais écrasées, et « Reprendre les décisions déjà saisies » les transforme en décisions Paladin traçables. Vos décisions sont enregistrées tout de suite ; l'Excel est mis à jour à l'export. Si Excel est ouvert, rien n'est perdu : fermez-le et relancez l'export.
 
+## Calibrer l'agent sur vos analyses manuelles
+
+Pour les premières applications, vous analysez quelques findings à la main (15 à 30), dans **votre** classeur, au format qui vous convient :
+
+1. Ouvrir la page **Calibration** de la campagne, puis déposer le classeur. Il n'est jamais modifié.
+2. Vérifier l'aperçu : Paladin reconnaît les colonnes (Instance ID, ou fichier + ligne, verdict, commentaire, temps passé) et montre comment il traduit chaque valeur (`TP`, `FP`, `Faux positif`…). Corriger si besoin, puis « Importer ».
+3. Environ un tiers des analyses devient le **jeu de référence**, jamais montré à l'agent. Le reste sert d'**exemples**, qui lui sont montrés, y compris sur les applications suivantes.
+4. « Mettre en file » puis lancer l'agent. Il analyse la référence **à l'aveugle**, sans toucher à vos décisions.
+5. Lire le rapport : vrais problèmes manqués en premier, puis les écarts, les commentaires côte à côte, le coût et la durée. Écrire ensuite les **conventions d'équipe** (vos règles d'analyse, en clair, envoyées à l'agent) et relancer. Chaque version est mesurée à part.
+
+La page compare aussi votre temps manuel au temps de revue assistée. En ligne de commande : `Paladin.cmd calibration import mon_classeur.xlsx`, puis `--apply`, `calibration run` et `calibration report`.
+
 ## Votre propre campagne
 
 Copier [`examples/campaign.example.json`](examples/campaign.example.json), y mettre vos chemins, puis :

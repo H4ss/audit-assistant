@@ -58,7 +58,7 @@ Jobs à bail, API agent, plugin OpenCode V2, runner avec budget mesuré, sondage
 | P6-7 | Mesures du pilote (section 17) avec effectifs | done | `test_pilot_metrics…` |
 | P6-8 | Recette finale de la tranche (section 24.5) et `docs/RECETTE.md` | done | `test_slice_acceptance_end_to_end` |
 
-## P7 — Retours de revue — `done` (en attente de check)
+## P7 — Retours de revue — `done` (v0.7.0)
 
 | ID | Tâche | État | Recette |
 |---|---|---|---|
@@ -67,6 +67,18 @@ Jobs à bail, API agent, plugin OpenCode V2, runner avec budget mesuré, sondage
 | P7-3 | Export entièrement en anglais (`Comments`, `Finding ID`), ancien `Commentaires` reconnu | done | `test_default_columns…`, `test_legacy_commentaires…` |
 | P7-4 | Certificat : contexte TLS vérifiant (appel déprécié corrigé), message de conversion pour un fichier illisible ; procédure documentée | done | `test_ca_bundle…` |
 | P7-5 | README : `/connect` (OpenCode) et choix du modèle (Paladin) clarifiés | done | — |
+
+## P8 — Calibration sur analyses manuelles — `done` (en attente de check)
+
+| ID | Tâche | État | Recette |
+|---|---|---|---|
+| P8-1 | Import depuis le classeur personnel de l'analyste : colonnes inférées par en-têtes et données, rapprochement Instance ID puis fichier + ligne, traduction des verdicts visible et modifiable, lecture mémorisée par signature, décisions « import » annulables | done | `test_own_workbook…`, `test_import_creates…`, `test_existing_different…` |
+| P8-2 | Exemples / jeu de référence : répartition stratifiée stable, exposition à l'agent tracée, cas exposé refusé en référence | done | `test_shown_precedent…` |
+| P8-3 | Analyse à l'aveugle : jobs dédiés, décision, état et export intacts, commentaires source et règles issues de la référence retirés du contexte | done | `test_blind_analysis…`, `test_rules_from_reference…` |
+| P8-4 | Rapport de calibration par cas et par version des conventions (TP manqués en tête, références, coût, durée, indépendance) | done | `test_blind_analysis…` |
+| P8-5 | Conventions d'équipe versionnées injectées dans le contexte et la skill ; précédents des autres applications | done | `test_conventions…`, `test_precedents_from_other…` |
+| P8-6 | Temps manuel de référence contre revue assistée mesurée | done | `test_time_gain…` |
+| P8-7 | Page « Calibration », aperçu d'import, CLI `calibration` | done | `test_calibration_from_ui`, `test_calibration_from_cli` |
 
 À discuter : profils d'instance SSC (dev/prod) ; lecture directe du magasin de certificats Windows.
 

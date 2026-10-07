@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Calibration — {{ campaign.name }}{% endblock %}
+{% block content %}
+{% set s = r.summary %}
+<section class="panel">
+  <h1>Calibrer l'agent sur vos analyses manuelles</h1>
+  <ol class="small">
+    <li>Analysez quelques findings à la main dans <b>votre</b> classeur, puis déposez-le ici (il n'est jamais modifié).</li>
+    <li>Paladin répartit vos décisions : <b>exemples</b> (montrés à l'agent) et <b>jeu de référence</b> (jamais montré).</li>
+    <li>L'agent analyse le jeu de référence <b>à l'aveugle</b> : vos décisions ne bougent pas.</li>
+    <li>Le rapport compare ses verdicts aux vôtres ; ajustez les <a href="#conventions">conventions d'équipe</a> et relancez.</li>
+  </ol>
+</section>
+
+<section class="panel" id="import">
+  <h2>1. Importer mes analyses manuelles</h2>
+  <form method="post" action="/c/{{ campaign.id }}/calibration/upload" enctype="multipart/form-data" class="row wrap">
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="file" name="file" accept=".xlsx,.xlsm" required>
+    <button class="btn primary">Déposer et prévisualiser</button>
+  </form>
+  <p class="small muted">Colonnes reconnues d'après vos en-têtes et vos données : identifiant (Instance ID) ou fichier + ligne, verdict (TP, FP, True Positive, Not an issue…), commentaire, et si vous l'avez noté le temps passé en minutes. Rien n'est importé avant votre confirmation.</p>
+</section>
+
+<section class="panel">
+  <h2>2. Exemples et jeu de référence</h2>
+  <div class="grid">
+    <div class="tile"><strong>{{ r.examples }}</strong> exemple(s) <span class="small muted">montrés à l'agent comme précédents, y compris pour les autres applications</span></div>
+    <div class="tile"><strong>{{ s.reference }}</strong> cas de référence <span class="small muted">dont {{ r.reference_tp }} True Positive · jamais montrés à l'agent</span></div>
+  </div>
+  <form method="post" action="/c/{{ campaign.id }}/calibration/resplit" class="row" style="margin-top:.8rem">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button class="btn small" data-confirm="Refaire la répartition automatique (environ un tiers en référence, par verdict) ?">Répartir à nouveau automatiquement</button>
+    <span class="small muted">Un cas déjà montré à l'agent reste un exemple. Basculer un cas : boutons du tableau ci-dessous ou de sa fiche.</span>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>3. Analyse à l'aveugle du jeu de référence</h2>
+  <p>Conventions utilisées : <b>{{ ('v' ~ r.current_version) if r.current_version else 'aucune' }}</b> · agent : {{ agent.label }}{% if agent.pending %} · {{ agent.pending }} job(s) en attente{% endif %}</p>
+  {% if r.to_enqueue %}
+  <form method="post" action="/c/{{ campaign.id }}/calibration/blind" class="row">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button class="btn primary">Mettre {{ r.to_enqueue }} cas en file</button>
+    <span class="small muted">{% if r.average_cost %}Coût estimé ≈ {{ '%.2f'|format(r.to_enqueue * r.average_cost) }} $ ({{ r.to_enqueue }} × {{ r.average_cost }} $ observés en moyenne){% else %}Coût : pas encore de mesure (aucune analyse réelle terminée){% endif %}</span>
+  </form>
+  {% else %}<p class="muted">Rien à mettre en file pour cette version des conventions.</p>{% endif %}
+  <p class="small muted">Ensuite : page <a href="/agent">Agent</a> ou <code>Paladin.cmd agent run</code>. Pour une analyse à l'aveugle, les commentaires de l'outil et les règles tirées de la référence sont retirés du contexte.</p>
+</section>
+
+<section class="panel" id="rapport">
+  <h2>4. Rapport de calibration</h2>
+  {% if r.summaries|length > 1 %}
+  <table class="table small">
+    <thead><tr><th>Conventions</th><th>Analysés</th><th>Accord</th><th>TP manqués</th><th>Sur-signalés</th><th>Abstentions</th><th>Références vérifiées</th><th>Coût</th><th>Durée moy.</th></tr></thead>
+    {% for v in r.summaries %}
+    <tr{% if v.version == r.version %} style="font-weight:600"{% endif %}><td><a href="?version={{ v.version }}#rapport">{{ ('v' ~ v.version) if v.version else 'sans' }}</a></td><td>{{ v.analysed }} / {{ v.reference }}</td><td>{{ v.agree }}</td>
+      <td>{% if v.missed_tp %}<span class="badge bad">{{ v.missed_tp }}</span>{% else %}0{% endif %}</td><td>{{ v.overcalled }}</td><td>{{ v.abstained }}</td><td>{{ v.refs_ok }} / {{ v.refs_total }}</td>
+      <td>{{ ('%.2f $'|format(v.cost_usd)) if v.cost_usd is not none else '—' }}</td><td>{{ (v.avg_seconds ~ ' s') if v.avg_seconds is not none else '—' }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+  <div class="grid">
+    <div class="tile"><strong>{{ s.agree }} / {{ s.analysed }}</strong> verdicts identiques aux vôtres <span class="small muted">{{ s.analysed }} analysé(s) sur {{ s.reference }} · conventions {{ ('v' ~ r.version) if r.version else 'aucune' }}</span></div>
+    <div class="tile"><strong class="{{ 'warn-text' if s.missed_tp else '' }}">{{ s.missed_tp }}</strong> vrai(s) problème(s) proposé(s) « Not an issue » <span class="small muted">l'erreur dangereuse : à lire en premier</span></div>
+    <div class="tile"><strong>{{ s.overcalled }}</strong> sur-signalé(s) · <strong>{{ s.abstained }}</strong> abstention(s) <span class="small muted">abstention = « à investiguer », jamais une erreur</span></div>
+    <div class="tile"><strong>{{ s.refs_ok }} / {{ s.refs_total }}</strong> références de code vérifiées <span class="small muted">{% if s.cost_usd is not none %}{{ '%.2f'|format(s.cost_usd) }} $ au total{% endif %}{% if s.avg_seconds %} · {{ s.avg_seconds }} s par cas{% endif %}</span></div>
+  </div>
+  {% if r.warnings %}<div class="callout warn"><ul>{% for w in r.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+  <table class="table small" style="margin-top:.8rem">
+    <thead><tr><th>Cas</th><th>Vous</th><th>Agent</th><th>Écart</th><th>Références · coût · durée</th><th></th></tr></thead>
+    {% for x in r.rows %}
+    <tr>
+      <td><a href="/c/{{ campaign.id }}/f/{{ x.finding_id }}?view=all"><code>{{ x.source_id[-12:] }}</code></a><br><span class="muted">{{ x.category or '' }}</span><br><code class="muted">{{ x.location }}</code></td>
+      <td><span class="badge v-{{ x.human_verdict|lower }}">{{ VERDICT_LABELS[x.human_verdict] }}</span>{% if not x.independent %} <span class="badge warn" title="Décision prise en voyant une proposition de l'agent">non indépendante</span>{% endif %}{% if x.human_comment %}<br>« {{ x.human_comment }} »{% endif %}</td>
+      <td>{% if x.agent_verdict %}<span class="badge v-{{ x.agent_verdict|lower }}">{{ VERDICT_LABELS[x.agent_verdict] }}</span>{% if x.simulated %} <span class="badge demo">simulée</span>{% endif %}{% if x.agent_comment %}<br>« {{ x.agent_comment }} »{% endif %}{% if x.agent_summary %}<br><span class="muted">{{ x.agent_summary }}</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td><span class="badge {{ 'bad' if x.status == 'TP manqué' else ('warn' if x.status in ('sur-signalé', 'abstention') else ('ok' if x.status == 'accord' else '')) }}">{{ x.status }}</span></td>
+      <td>{% if x.agent_verdict %}{{ x.refs_ok }} / {{ x.refs_total }}{% if x.cost_usd is not none %} · {{ '%.3f'|format(x.cost_usd) }} ${% endif %}{% if x.seconds is not none %} · {{ x.seconds|round|int }} s{% endif %}{% if x.model %}<br><span class="muted">{{ x.model }}</span>{% endif %}{% endif %}</td>
+      <td><form method="post" action="/c/{{ campaign.id }}/f/{{ x.finding_id }}/reference" class="inline"><input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="reference" value="0"><input type="hidden" name="back" value="/c/{{ campaign.id }}/calibration#rapport"><button class="btn small" title="Le cas devient un exemple : sa décision pourra être montrée à l'agent">→ exemple</button></form></td>
+    </tr>
+    {% else %}<tr><td colspan="6" class="muted">Pas encore de jeu de référence : importer vos analyses manuelles (étape 1).</td></tr>{% endfor %}
+  </table>
+</section>
+
+<section class="panel" id="conventions">
+  <h2>5. Conventions d'équipe</h2>
+  <p class="muted">Vos règles d'analyse, en clair, envoyées à l'agent avec chaque cas (version tracée sur chaque proposition). Exemples : « Les logs internes sans donnée personnelle sont Not an issue », « Toujours citer la ligne du correctif dans le commentaire », « Commentaire en anglais, une phrase ». Rédigez-les à partir des <b>exemples</b> ci-dessous, jamais du jeu de référence, sinon la mesure ne vaut plus rien.</p>
+  <form method="post" action="/c/{{ campaign.id }}/calibration/conventions">
+    <input type="hidden" name="token" value="{{ token }}">
+    <textarea name="text" rows="10" style="width:100%">{{ conventions.text if conventions else '' }}</textarea>
+    <div class="row wrap" style="margin-top:.5rem">
+      <input type="text" name="note" placeholder="ce qui change dans cette version (facultatif)" style="flex:1">
+      <button class="btn primary">Enregistrer une nouvelle version</button>
+    </div>
+  </form>
+  {% if history %}<p class="small muted">Versions : {% for h in history %}v{{ h.version }} ({{ h.created_at[:10] }}{% if h.note %}, {{ h.note }}{% endif %}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  <details{% if examples and not conventions %} open{% endif %}>
+    <summary>Vos exemples par catégorie (toutes applications, hors référence)</summary>
+    <table class="table small">
+      {% for c in examples %}
+      <tr><td><b>{{ c.category or '(sans catégorie)' }}</b><br><span class="muted">TP {{ c.tp }} · Not an issue {{ c.nai }}</span></td>
+        <td><ul>{% for e in c['items'] %}<li>{{ VERDICT_LABELS[e.verdict] }} — « {{ e.comment }} » <span class="muted">{{ e.application_name or '' }}</span></li>{% else %}<li class="muted">pas de commentaire</li>{% endfor %}</ul></td></tr>
+      {% else %}<tr><td class="muted">Aucun exemple décidé pour l'instant.</td></tr>{% endfor %}
+    </table>
+  </details>
+</section>
+
+<section class="panel" id="temps">
+  <h2>6. Temps : manuel contre assisté</h2>
+  <div class="grid">
+    <div class="tile"><strong>{{ (gain.manual_min ~ ' min') if gain.manual_min is not none else '—' }}</strong> par finding à la main
+      <span class="small muted">{% if gain.baseline %}{{ gain.baseline.minutes }} min pour {{ gain.baseline.findings }} finding(s) · {{ gain.baseline.source }}{% else %}à renseigner ci-dessous{% endif %}</span></div>
+    <div class="tile"><strong>{{ (gain.assisted_min ~ ' min') if gain.assisted_min is not none else '—' }}</strong> par décision assistée
+      <span class="small muted">{{ gain.assisted_decisions }} décision(s) dans Paladin, {{ gain.assisted_hours }} h actives{% if gain.assisted_min is none %} · mesurable à partir de 5 décisions{% endif %}</span></div>
+    <div class="tile"><strong>{{ (gain.saved_min ~ ' min') if gain.saved_min is defined else '—' }}</strong> gagnées par finding
+      <span class="small muted">{% if gain.saved_min is defined %}≈ {{ gain.remaining_saved_hours }} h sur les {{ gain.remaining }} finding(s) restant(s){% else %}les deux mesures sont nécessaires{% endif %}{% if gain.agent_cost %} · agent ≈ {{ gain.agent_cost }} $ par analyse{% endif %}</span></div>
+  </div>
+  <form method="post" action="/c/{{ campaign.id }}/calibration/baseline" class="row wrap" style="margin-top:.8rem">
+    <input type="hidden" name="token" value="{{ token }}">
+    <label>J'ai passé <input type="number" name="minutes" min="1" step="1" style="width:6rem" value="{{ gain.baseline.minutes|int if gain.baseline else '' }}"> minutes</label>
+    <label>sur <input type="number" name="findings" min="1" step="1" style="width:5rem" value="{{ gain.baseline.findings if gain.baseline else '' }}"> findings analysés à la main</label>
+    <button class="btn">Enregistrer</button>
+  </form>
+  <p class="small muted">Rempli automatiquement si votre classeur a une colonne « temps (min) ». Le temps assisté additionne les écarts de moins de 15 minutes entre vos décisions dans Paladin.</p>
+</section>
+{% endblock %}

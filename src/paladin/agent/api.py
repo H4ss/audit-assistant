@@ -152,6 +152,8 @@ def build_router(conn: sqlite3.Connection, agent_token: str, skill_version: str 
                 model_resolved=meta.get("model_resolved"),
                 skill_version=skill_version,
                 context_version=meta.get("context_version"),
+                is_blind=bool(job["blind"]),
+                conventions_version=job["conventions_version"],
             )
         except ProposalRejectedError as exc:
             return JSONResponse(status_code=409, content={"error": str(exc)})

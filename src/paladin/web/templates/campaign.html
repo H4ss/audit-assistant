@@ -111,6 +111,12 @@
 </section>
 
 <section class="panel">
+  <h2>6. Calibrer l'agent sur vos analyses manuelles</h2>
+  <p>Vous analysez d'abord quelques findings à la main, dans votre propre classeur ? Importez-le : une partie sert d'exemples à l'agent, le reste de jeu de référence qu'il analyse à l'aveugle. Le rapport compare ses verdicts aux vôtres et vous ajustez les conventions d'équipe.</p>
+  <a class="btn" href="/c/{{ campaign.id }}/calibration">Ouvrir la calibration</a>
+</section>
+
+<section class="panel">
   <h2>Dernière décision</h2>
   {% if last_decided %}
   <form method="post" action="/c/{{ campaign.id }}/undo" class="row">

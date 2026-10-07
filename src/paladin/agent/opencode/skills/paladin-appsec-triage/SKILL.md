@@ -32,3 +32,9 @@ compatibility: opencode
 ## Preuves
 
 Chaque preuve : `file` = `<repo>/<chemin>`, `line_start` (et `line_end`), `excerpt` recopié exactement, `note` d'une phrase. Deux à quatre preuves suffisent : la source, la protection (ou son absence), l'opération sensible.
+
+## Conventions d'équipe, précédents et règles
+
+- `team_conventions` (si présent) : règles d'analyse validées par l'analyste. Les appliquer pour le verdict **et** pour la rédaction de `suggested_analysis_result_comment` (langue, longueur, mentions attendues). Elles ne remplacent jamais la preuve : un cas qui ne remplit pas leurs conditions s'analyse normalement ; une convention qui semble contredire le code se signale dans `assumptions`.
+- `precedents` : décisions humaines sur des cas proches. `basis` = « même règle, autre application » vient d'une autre application : contexte différent, à vérifier dans le code. Un précédent oriente l'enquête, il ne vaut pas preuve. Des précédents contradictoires sur la même règle : chercher ce qui distingue ce cas.
+- `rules` : règles validées ; vérifier que chacune de leurs conditions s'applique vraiment à ce cas avant de s'en servir.

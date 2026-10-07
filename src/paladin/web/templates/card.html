@@ -49,6 +49,7 @@
     {% if a %}
       <div class="row wrap">
         <span class="badge big v-{{ a.proposed_verdict|lower }}">{{ VERDICT_LABELS[a.proposed_verdict] }}</span>
+        {% if a.is_blind %}<span class="badge" title="Analyse du jeu de référence pour la calibration : n'a jamais modifié la décision">analyse à l'aveugle</span>{% endif %}
         {% if a.is_simulated %}<span class="badge demo" title="Écrite à la main pour la démo, aucun modèle appelé">proposition simulée</span>
         {% else %}<span class="muted small">{{ a.model_requested }} → {{ a.model_resolved }}</span>{% endif %}
         <span class="muted small" title="Déclarée par le modèle, jamais calibrée">confiance déclarée : {{ a.payload.model_confidence.level }} (non calibrée)</span>
@@ -174,7 +175,7 @@
   </details>
   <details {{ 'open' if c.precedents.contradiction }}>
     <summary>Précédents ({{ c.precedents['items']|length }}){% if c.precedents.contradiction %} <span class="badge warn">verdicts contradictoires</span>{% endif %}</summary>
-    <ul class="small">{% for p in c.precedents['items'] %}<li>{{ p.basis }} — <a href="/c/{{ campaign.id }}/f/{{ p.id }}?view=all"><code>{{ p.source_id[-12:] }}</code></a> <code>{{ p.normalized_path }}:{{ p.line_number }}</code> → <b>{{ VERDICT_LABELS[p.verdict] }}</b>{% if p.comment %} « {{ p.comment }} »{% endif %}{% if p.authority == 'batch' %} (lot){% endif %}{% if p.is_reference %} <span class="badge">référence</span>{% endif %}</li>{% else %}<li class="muted">Aucun précédent décidé.</li>{% endfor %}</ul>
+    <ul class="small">{% for p in c.precedents['items'] %}<li>{{ p.basis }} — {% if p.basis.startswith('même règle, autre') %}{{ p.application_name or '?' }} <code>{{ p.source_id[-12:] }}</code>{% else %}<a href="/c/{{ campaign.id }}/f/{{ p.id }}?view=all"><code>{{ p.source_id[-12:] }}</code></a>{% endif %} <code>{{ p.normalized_path }}:{{ p.line_number }}</code> → <b>{{ VERDICT_LABELS[p.verdict] }}</b>{% if p.comment %} « {{ p.comment }} »{% endif %}{% if p.authority == 'batch' %} (lot){% endif %}{% if p.is_reference %} <span class="badge">référence</span>{% endif %}</li>{% else %}<li class="muted">Aucun précédent décidé.</li>{% endfor %}</ul>
   </details>
   <details>
     <summary>Mémoire</summary>

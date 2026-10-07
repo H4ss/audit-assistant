@@ -34,6 +34,8 @@ py -3.14 -m venv .venv
 | `python -m paladin profile list\|show\|validate <id>` | Valider en ligne de commande un mapping proposé |
 | `python -m paladin export [--final]` | Écrire l'Excel (aussi possible depuis l'interface) |
 | `python -m paladin agent setup\|enqueue\|run\|status` | Agent d'analyse OpenCode (voir plus bas) |
+| `python -m paladin calibration import <classeur> [--apply] [--role auto\|example\|reference]` | Importer vos analyses manuelles depuis votre propre classeur (aperçu sans `--apply`) |
+| `python -m paladin calibration run\|report\|baseline\|conventions` | Analyse à l'aveugle du jeu de référence, rapport, temps manuel, conventions d'équipe |
 | `python -m paladin doctor` | Diagnostic : Python, dossiers, base, OpenCode, Fortify |
 | `python -m paladin status` | Lister les campagnes |
 
@@ -119,7 +121,7 @@ Colonnes écrites dans l'Excel :
 
 - **Précédents** : chaque fiche liste les décisions passées sur des findings proches (même règle source, même fichier, même famille). Des verdicts contradictoires sont signalés.
 - **Écart** : quand vous corrigez une proposition, indiquez si vous le souhaitez la nature de l'écart (source mal comprise, protection manquée, mauvais commit, contexte métier, définition, rédaction).
-- **Jeu de référence** : « Ajouter au jeu de référence » sur une fiche décidée. Sa décision n'est jamais montrée à l'agent : la page « Mesures » compare ses propositions à ces cas pour détecter les régressions.
+- **Jeu de référence** : « Ajouter au jeu de référence » sur une fiche décidée, ou répartition automatique depuis la page « Calibration ». Sa décision n'est jamais montrée à l'agent : la page « Calibration » compare ses analyses à l'aveugle à ces cas (voir plus bas).
 - **Règles** : « Créer une règle à partir de cette décision ». Elle se définit par des conditions vérifiables (outil, règle source ou famille, motif de chemin, fonction, point d'impact), une portée, des exceptions et un contre-exemple.
   - Elle reste **proposée** jusqu'à « Valider ». Une fois active, elle s'affiche sur les fiches concernées, avec « Utiliser », et sert de base aux lots.
   - **La révoquer** met en réexamen les décisions qui en dérivent.
@@ -170,6 +172,45 @@ Si le classeur cible contient déjà des verdicts, issus d'une analyse précéde
 4. Pour annuler en bloc : « Groupes et lots » › historique › annuler la reprise. Les cellules redeviennent des saisies humaines, que l'export ne touchera plus.
 
 En ligne de commande : `Paladin.cmd excel reprise --campaign <id>` affiche l'aperçu, et `--apply` applique. Pour changer de classeur : `Paladin.cmd excel target <classeur.xlsx> --campaign <id>`.
+
+## Calibrer l'agent sur vos analyses manuelles
+
+Page **Calibration** de la campagne. La boucle :
+
+1. **Importer vos analyses manuelles** depuis votre propre classeur. Il est copié et jamais modifié.
+   - **Lecture des colonnes** : déduite des en-têtes et des données.
+     - La colonne d'identifiant est celle dont les valeurs correspondent aux findings importés, quel que soit son titre.
+     - La colonne de verdict est celle qui contient `TP`, `FP`, `Vrai positif`, `Faux positif`, `True Positive`, `Not an issue`…
+     - Commentaire, fichier, ligne, catégorie et temps passé (en minutes) sont reconnus par leur titre.
+     - Une ligne de titre au-dessus des en-têtes est ignorée.
+   - **Rapprochement** : par identifiant (Instance ID), sinon par fichier + ligne. Le chemin peut être partiel ou avec des `\`, et la catégorie départage deux candidats.
+   - **Traduction des verdicts** : chaque valeur distincte est montrée avec sa traduction, modifiable. Une valeur ambiguë (`OK`, `oui`…) n'est jamais devinée : elle reste « à traduire ».
+   - **Statuts** : à importer, déjà identique, conflit (la décision Paladin est conservée), verdict à traduire, commentaire sans verdict, rapprochement ambigu, doublon, sans finding.
+   - **Lecture retenue** : elle est mémorisée pour tout classeur aux mêmes en-têtes, par exemple le sprint suivant.
+   - **Décisions créées** : elles sont marquées « analyse manuelle » (autorité import) et annulables en bloc depuis « Groupes et lots ».
+2. **Exemples et jeu de référence**.
+   - **Répartition automatique** : environ un tiers par verdict va dans la référence, avec au moins un TP dès qu'il y en a deux. Elle est stable et peut être refaite.
+   - **Ce que voit l'agent** :
+     - Les **exemples** lui sont montrés comme précédents, y compris dans les autres applications, où ils sont marqués « même règle, autre application ».
+     - La **référence** ne lui est jamais montrée.
+   - **Cas exposé** : un cas déjà montré à l'agent ne peut plus entrer dans la référence, car la mesure serait biaisée.
+3. **Analyse à l'aveugle** : « Mettre en file », puis `agent run`. L'agent analyse les cas de référence comme n'importe quel finding, avec deux différences :
+   - il ne voit ni les commentaires de l'outil ni les règles tirées de la référence, qui pourraient contenir la réponse ;
+   - sa proposition ne modifie ni votre décision, ni l'état du finding, ni l'Excel.
+
+   Le coût estimé est affiché avant la mise en file.
+4. **Rapport** :
+   - **Par cas** : votre verdict et votre commentaire, puis ceux de l'agent, l'écart (TP manqué en premier, puis sur-signalé, abstention, accord), les références de code vérifiées, le coût, la durée et le modèle.
+   - **Par version des conventions** : une ligne de synthèse chacune.
+   - **Alertes** : référence trop petite, aucun TP dans la référence, décision prise en voyant une proposition (« non indépendante »).
+5. **Conventions d'équipe** :
+   - **Contenu** : vos règles d'analyse en texte libre, par exemple « MD5 pour une clé de cache : Not an issue » ou « commentaire en anglais, une phrase, citer la protection ».
+   - **Versions** : chaque enregistrement crée une nouvelle version, jamais modifiée ensuite. L'agent la reçoit avec chaque cas, et la version est tracée sur chaque proposition.
+   - **Rédaction** : la page résume vos **exemples** par catégorie pour vous aider à les écrire. Ne les écrivez pas à partir des cas de référence.
+6. **Temps manuel contre temps assisté** :
+   - **Temps manuel** : il est rempli par la colonne de temps du classeur, si elle existe, ou saisi à la main (minutes et nombre de findings).
+   - **Temps assisté** : il additionne les écarts de moins de 15 minutes entre vos décisions dans Paladin. Il est mesurable à partir de 5 décisions.
+   - **Gain** : il s'affiche par finding et pour les findings restants.
 
 ## Langue de l'Excel
 
