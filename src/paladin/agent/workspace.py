@@ -57,11 +57,15 @@ def model_parts(model: str) -> tuple[str, str]:
 
 
 def opencode_config(model: str) -> dict:
-    provider, name = model_parts(model)
+    """Configuration du projet de l'agent : modèle et permissions seulement.
+
+    Aucun bloc `provider` : le fournisseur, son authentification et son proxy viennent de la
+    configuration OpenCode déjà en place sur le poste (plug and play).
+    """
+    model_parts(model)
     return {
         "$schema": "https://opencode.ai/config.json",
         "model": model,
-        "provider": {provider: {"models": {name: {}}}},
         # Défense en profondeur : même l'agent par défaut de cet espace n'a que les outils Paladin.
         "permission": {"*": "deny", "paladin_*": "allow", "skill": {"*": "deny", "paladin-appsec-triage": "allow"}},
     }

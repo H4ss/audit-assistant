@@ -213,12 +213,9 @@ def run_agent(
     provider, _ = model_parts(model)
     exe = opencode_cmd or [_opencode()]
     setup(settings, model)
+    # Clé OpenRouter facultative : elle sert seulement à mesurer la dépense côté fournisseur.
+    # L'authentification du modèle est celle de l'OpenCode du poste.
     api_key = os.environ.get("OPENROUTER_API_KEY") if provider == "openrouter" else None
-    if provider == "openrouter" and not api_key:
-        raise AgentRunError(
-            "Variable OPENROUTER_API_KEY absente.",
-            "Définir la clé dans l'environnement (jamais dans un fichier du dépôt).",
-        )
 
     url = running_server(settings)
     stop_server: Callable[[], None] | None = None
@@ -411,4 +408,10 @@ def probe_agent(settings: Settings, model: str | None = None, opencode_cmd: list
         if status == "completed" and not (name.startswith("paladin_") or name in ALLOWED_AGENT_TOOLS):
             forbidden.append(name)
     cost = parse_opencode_output(proc.stdout)["cost_usd"]
+    from paladin import readiness
+
+    ok = not forbidden and proc.returncode == 0
+    readiness.record(
+        settings, "agent_probe", ok, "aucun outil interdit exécuté" if ok else f"outils interdits {forbidden}"
+    )
     return ProbeResult(not forbidden and proc.returncode == 0, used, forbidden, cost, log, " ".join(texts).strip())
