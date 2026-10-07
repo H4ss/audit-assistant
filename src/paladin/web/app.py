@@ -1025,6 +1025,67 @@ def create_app(settings: Settings) -> FastAPI:
             flash=_pop_flash(conn, cid),
         )
 
+    # ------------------------------------------------- classeur cible et reprise
+
+    @app.post("/c/{cid}/excel/target")
+    async def excel_target(request: Request, cid: str):
+        from paladin.excel import reprise
+
+        form = await _form(request)
+        try:
+            missing = reprise.change_target(settings, conn, cid, Path(form.get("path", "").strip()))
+        except reprise.RepriseError as exc:
+            _flash(conn, cid, str(exc), "warn")
+            return RedirectResponse(f"/c/{cid}", status_code=303)
+        details = [f"Onglets attendus absents : {', '.join(missing)}"] if missing else []
+        details.append("Si ce classeur contient déjà des verdicts : « Reprendre les décisions déjà saisies ».")
+        _flash(conn, cid, "Classeur cible changé.", "warn" if missing else "ok", details)
+        return RedirectResponse(f"/c/{cid}", status_code=303)
+
+    @app.get("/c/{cid}/reprise", response_class=HTMLResponse)
+    def reprise_page(request: Request, cid: str):
+        from paladin.excel import reprise
+
+        campaign = _campaign(cid)
+        try:
+            plan = reprise.scan(settings, conn, cid)
+        except reprise.RepriseError as exc:
+            _flash(conn, cid, str(exc), "warn")
+            return RedirectResponse(f"/c/{cid}", status_code=303)
+        statuses = {}
+        for it in plan.items:
+            statuses.setdefault(it.status, []).append(it)
+        return render(
+            request,
+            "reprise.html",
+            campaign=campaign,
+            plan=plan,
+            statuses=statuses,
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+        )
+
+    @app.post("/c/{cid}/reprise")
+    async def reprise_apply(request: Request, cid: str):
+        from paladin.excel import reprise
+
+        await _form(request)
+        try:
+            rid, plan = reprise.apply(settings, conn, cid, AUTHOR)
+        except reprise.RepriseError as exc:
+            _flash(conn, cid, str(exc), "warn")
+            return RedirectResponse(f"/c/{cid}/reprise", status_code=303)
+        conflicts = plan.by_status("conflit")
+        _flash(
+            conn,
+            cid,
+            f"{len(plan.importable)} décision(s) reprise(s) du classeur (reprise {rid[:8]}),"
+            " marquées « reprise Excel ». Annulable en bloc depuis « Groupes et lots ».",
+            "ok",
+            [f"{len(conflicts)} conflit(s) conservé(s) côté Paladin"] if conflicts else None,
+        )
+        return RedirectResponse(f"/c/{cid}", status_code=303)
+
     @app.post("/c/{cid}/import")
     async def run_import(request: Request, cid: str):
         from paladin.importers.pipeline import import_tool

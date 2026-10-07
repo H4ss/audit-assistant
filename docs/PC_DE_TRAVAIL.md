@@ -62,6 +62,24 @@ Page « Prêt pour le travail ? », section « Connexion Fortify SSC » :
 
 En ligne de commande : `Paladin.cmd fortify login`, puis `Paladin.cmd fortify check`.
 
+### Le certificat d'entreprise
+
+Une autre application du poste parle déjà à Fortify, donc l'autorité de certification interne existe sur le poste. Paladin n'en a besoin **que si le diagnostic signale une erreur TLS**.
+
+- **Emplacement** : aucun déplacement n'est nécessaire. Indiquez le **chemin complet** du fichier dans « Certificat de l'autorité d'entreprise », où qu'il se trouve. Il n'est jamais copié dans le dépôt.
+- **Format attendu** : **PEM**, un texte qui commence par `-----BEGIN CERTIFICATE-----`. Selon ce que vous avez :
+
+  | Ce que vous avez | Conversion |
+  |---|---|
+  | Fichier `.pem`, ou `.crt` texte | Rien à faire |
+  | Fichier `.cer` ou `.der` binaire | `certutil -encode ac.cer ac.pem` |
+  | Magasin Java (`.jks`, `cacerts`), fréquent pour les outils Fortify | `keytool -list -keystore <magasin>` pour trouver l'alias, puis `keytool -exportcert -rfc -keystore <magasin> -alias <alias> -file ac.pem` |
+  | Seulement dans le magasin Windows | `certmgr.msc`, puis Autorités de certification racines de confiance › le certificat › Toutes les tâches › Exporter › « Codé à base 64 (.cer) ». Ce fichier est déjà au format PEM |
+
+- **Côté OpenCode** (fournisseur du modèle), le même fichier PEM se déclare par la variable `NODE_EXTRA_CA_CERTS`.
+
+Un fichier illisible ou binaire produit un message qui indique la conversion à faire. TLS n'est jamais désactivé.
+
 ## Étape 4 — Choisir les applications
 
 Page « Applications SSC », bouton **Découvrir les applications**. Paladin regroupe par préfixe :

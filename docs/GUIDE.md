@@ -149,6 +149,32 @@ Pendant l'exécution :
 
 Usage interactif : ouvrir OpenCode dans le dossier de l'agent et choisir l'agent `paladin-analyst`. Paladin doit être lancé (`Paladin.cmd`) pour que les outils le joignent.
 
+## Reprendre un classeur déjà renseigné
+
+Si le classeur cible contient déjà des verdicts, issus d'une analyse précédente ou d'une saisie manuelle :
+
+1. Dans le tableau de bord, section Excel, ouvrir « Classeur déjà renseigné ou à changer ». Choisir « Changer le classeur cible » si besoin, puis **« Reprendre les décisions déjà saisies »**.
+2. L'aperçu classe chaque ligne :
+
+   | Statut | Ce qui se passe |
+   |---|---|
+   | à reprendre | Repris tel quel |
+   | normalisée | `TP` / `FP` → `True Positive` / `Not an issue`, réécrit au prochain export |
+   | déjà identique | Rien à faire |
+   | conflit | Paladin a déjà une autre décision : elle est **conservée** |
+   | commentaire sans verdict | Non repris : rien n'est inventé |
+   | valeur non reconnue | Non reprise, jamais touchée |
+   | ligne sans finding | Clé inconnue de Paladin |
+
+3. « Reprendre ». Chaque valeur devient une décision marquée **« reprise Excel »**, avec le texte exact du commentaire. Elle compte dans les précédents et dans les mesures, comme reprise.
+4. Pour annuler en bloc : « Groupes et lots » › historique › annuler la reprise. Les cellules redeviennent des saisies humaines, que l'export ne touchera plus.
+
+En ligne de commande : `Paladin.cmd excel reprise --campaign <id>` affiche l'aperçu, et `--apply` applique. Pour changer de classeur : `Paladin.cmd excel target <classeur.xlsx> --campaign <id>`.
+
+## Langue de l'Excel
+
+Les en-têtes générés et les valeurs écrites sont en anglais : `Comments`, `Finding ID`, `analysis result`, `True Positive` / `Not an issue`, `Found in …`, `Pending review`, `Unknown`… Un classeur existant garde ses en-têtes réels ; un ancien en-tête `Commentaires` reste reconnu. L'interface de Paladin, elle, reste en français.
+
 ## Dépannage
 
 | Symptôme | Action |

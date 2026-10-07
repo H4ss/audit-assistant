@@ -22,7 +22,13 @@ Au premier lancement, le script installe tout (1 à 2 minutes), crée une **dém
 ## Sur le PC de travail, en 4 étapes
 
 1. **Installer** : `git clone …` puis double-clic sur `Paladin.cmd`.
-2. **Connecter le modèle** : dans OpenCode, `/connect` vers le fournisseur de l'entreprise (une fois). Puis, dans Paladin, page **Agent** : « Détecter mes modèles », choisir le GLM, « Tester et utiliser ». Paladin ne demande aucune clé.
+2. **Connecter le modèle**, en deux temps distincts :
+   - **a. Dans OpenCode, une seule fois** : `/connect`, choisir le fournisseur de l'entreprise et saisir ses identifiants. Cela branche OpenCode au GLM ; Paladin n'y touche pas et ne demande aucune clé.
+   - **b. Dans Paladin** : choisir *quel* modèle de cet OpenCode utiliser. Deux portes vers la même fonction :
+     - la page **Agent** : « Détecter mes modèles », choisir le GLM, « Tester et utiliser », « Lancer le sondage » ;
+     - ou `Paladin.cmd agent connect`, qui donne la même liste, le même test et le même sondage en ligne de commande.
+
+   Les autres sous-commandes `agent` servent ensuite au travail courant : `enqueue` (mettre en file), `run` (analyser), `status`, `probe` (sondage).
 3. **Connecter Fortify** : page **Prêt pour le travail ?**, saisir l'URL SSC et le jeton, puis « Lancer le diagnostic ».
 4. **Choisir les applications** : page **Applications SSC**. `APP.SUB1` + `APP.SUB2` = une entrée, `APP2.*` = une autre. Cocher, indiquer les dépôts, puis « Créer » et « Importer ».
 
@@ -32,7 +38,7 @@ Guide détaillé, liste des prérequis et dépannage : [docs/PC_DE_TRAVAIL.md](d
 
 1. **Sources** : cliquer sur « Importer ». Si une source est nouvelle, Paladin propose comment la lire. Vous validez une fois, et c'est retenu pour la suite.
 2. **Revue** : cliquer sur « Commencer la revue ». Pour chaque finding : `T` ou `N` pour le verdict, `A` pour valider et passer au suivant. `D` donne « security appetite to be discussed », `I` met « À investiguer », `U` annule. Appuyer sur `?` affiche tous les raccourcis.
-3. **Excel** : cliquer sur « Exporter ». Vos décisions sont enregistrées tout de suite ; l'Excel est mis à jour à l'export. Si Excel est ouvert, rien n'est perdu : fermez-le et relancez l'export.
+3. **Excel** : cliquer sur « Exporter ». Les colonnes et les valeurs sont en anglais. Un classeur **déjà renseigné** par une analyse précédente peut servir de cible : ses valeurs ne sont jamais écrasées, et « Reprendre les décisions déjà saisies » les transforme en décisions Paladin traçables. Vos décisions sont enregistrées tout de suite ; l'Excel est mis à jour à l'export. Si Excel est ouvert, rien n'est perdu : fermez-le et relancez l'export.
 
 ## Votre propre campagne
 

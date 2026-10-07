@@ -65,6 +65,16 @@
       <button class="btn primary" name="mode" value="working_copy">Exporter (copie de travail)</button>
       <button class="btn" name="mode" value="final" data-confirm="Mettre à jour le classeur cible désigné ? Une sauvegarde est faite avant écriture.">Mettre à jour le classeur cible</button>
     </form>
+    <details>
+      <summary class="small">Classeur déjà renseigné ou à changer</summary>
+      <p class="small"><a href="/c/{{ campaign.id }}/reprise">Reprendre les décisions déjà saisies dans ce classeur</a> — les verdicts et commentaires présents deviennent des décisions tracées « reprise », sans rien écraser.</p>
+      <form method="post" action="/c/{{ campaign.id }}/excel/target">
+        <input type="hidden" name="token" value="{{ token }}">
+        <label class="small">Changer le classeur cible (.xlsx) <input type="text" name="path" placeholder="C:\Audits\audit_v2.xlsx"></label>
+        <button class="btn small">Changer</button>
+      </form>
+      <p class="small muted">Classeur actuel : <code>{{ campaign.config.target_workbook }}</code></p>
+    </details>
     {% if last_export %}
     <p class="small muted">Dernier export : {{ last_export.created_at[:16].replace('T', ' ') }} — {{ last_export.status }}{% if last_export.status == 'verified' %} → <code>{{ last_export.destination_path }}</code>{% endif %}</p>
     {% endif %}

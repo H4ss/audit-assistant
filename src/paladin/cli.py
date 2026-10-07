@@ -410,6 +410,44 @@ def cmd_fortify(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_excel(args: argparse.Namespace) -> int:
+    """Classeur cible : en changer, ou reprendre les décisions qui y sont déjà saisies."""
+    from paladin.excel import reprise
+
+    settings, conn = _open(args)
+    try:
+        if args.action == "target":
+            if not args.path:
+                print("Chemin du classeur requis.")
+                return 2
+            missing = reprise.change_target(settings, conn, args.campaign, Path(args.path))
+            print(f"Classeur cible : {Path(args.path).resolve()}")
+            if missing:
+                print(f"Attention, onglets attendus absents : {', '.join(missing)}")
+            print(f"Pour reprendre les verdicts déjà saisis : Paladin.cmd excel reprise --campaign {args.campaign}")
+            return 0
+        plan = reprise.scan(settings, conn, args.campaign)
+        counts: dict[str, int] = {}
+        for it in plan.items:
+            counts[it.status] = counts.get(it.status, 0) + 1
+        print(f"Classeur : {plan.workbook}")
+        for status, n in sorted(counts.items()):
+            print(f"  {status:18} {n}")
+        for it in plan.by_status("conflit", "non reconnu"):
+            print(f"    {it.sheet}/{it.row} {it.key} : {it.status} — {it.detail}")
+        if not args.apply:
+            print(f"Aperçu seulement. Appliquer : Paladin.cmd excel reprise --campaign {args.campaign} --apply")
+            return 0
+        rid, plan = reprise.apply(settings, conn, args.campaign, "analyste")
+        print(f"{len(plan.importable)} décision(s) reprise(s) (reprise {rid[:8]}, annulable dans « Groupes et lots »).")
+        return 0
+    except reprise.RepriseError as exc:
+        print(str(exc))
+        return 2
+    finally:
+        conn.close()
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     home = _home_arg(args)
     settings = load_settings(home)
@@ -679,6 +717,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--workbook", help="Classeur cible existant (onglet Fortify) ; vide = classeur généré.")
     p.add_argument("--repo", action="append", help="Dossier d'un dépôt de code (répétable).")
     p.set_defaults(func=cmd_fortify)
+    p = add("excel", "Classeur cible : changer (target) ou reprendre les décisions déjà saisies (reprise).")
+    p.add_argument("action", choices=["target", "reprise"])
+    p.add_argument("path", nargs="?")
+    p.add_argument("--campaign", default="demo")
+    p.add_argument("--apply", action="store_true", help="Appliquer la reprise (sinon aperçu).")
+    p.set_defaults(func=cmd_excel)
     p = add("profile", "Profils d'entrée : lister, afficher, valider.")
     p.add_argument("action", choices=["list", "show", "validate"])
     p.add_argument("profile_id", nargs="?")

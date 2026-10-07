@@ -305,6 +305,19 @@ def undo(conn: sqlite3.Connection, batch_id: str, author: str) -> dict[str, list
             report["annulés"].append(f["source_id"])
         else:
             report["non touchés (modifiés depuis)"].append(f["source_id"])
+    if batch["verdict"] == "REPRISE":
+        # Reprise annulée : les cellules redeviennent des saisies humaines, que l'export ne touchera plus.
+        conn.execute(
+            "UPDATE export_run SET status = 'reverted' WHERE mode = 'reprise'"
+            " AND json_extract(summary_json, '$.reprise_id') = ?",
+            (batch_id,),
+        )
+        undone = list(loads(batch["member_ids_json"], []))
+        conn.execute(
+            "UPDATE finding SET export_state = 'not_exported', exported_decision_id = NULL, exported_run_id = NULL"
+            f" WHERE current_decision_id IS NULL AND id IN ({', '.join('?' * len(undone))})",
+            undone,
+        )
     conn.execute(
         "UPDATE batch SET undone_at = ?, undo_report_json = ? WHERE id = ?", (utcnow(), dumps(report), batch_id)
     )
