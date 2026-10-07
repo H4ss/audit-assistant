@@ -115,6 +115,20 @@ Colonnes écrites dans l'Excel :
 
 `No confirmed match` ne veut pas dire que l'outil ne sait pas détecter la vulnérabilité. Si un onglet existant n'a pas les colonnes d'un outil, le bouton « Ajouter ces colonnes à l'export » les ajoute en fin de ligne d'en-tête. Annuler un lien après export rend l'Excel **périmé** : réexporter.
 
+## Mémoire, règles et lots
+
+- **Précédents** : chaque fiche liste les décisions passées sur des findings proches (même règle source, même fichier, même famille). Des verdicts contradictoires sont signalés.
+- **Écart** : quand vous corrigez une proposition, indiquez si vous le souhaitez la nature de l'écart (source mal comprise, protection manquée, mauvais commit, contexte métier, définition, rédaction).
+- **Jeu de référence** : « Ajouter au jeu de référence » sur une fiche décidée. Sa décision n'est jamais montrée à l'agent : la page « Mesures » compare ses propositions à ces cas pour détecter les régressions.
+- **Règles** : « Créer une règle à partir de cette décision ». Elle se définit par des conditions vérifiables (outil, règle source ou famille, motif de chemin, fonction, point d'impact), une portée, des exceptions et un contre-exemple.
+  - Elle reste **proposée** jusqu'à « Valider ». Une fois active, elle s'affiche sur les fiches concernées, avec « Utiliser », et sert de base aux lots.
+  - **La révoquer** met en réexamen les décisions qui en dérivent.
+- **Groupes et lots** : un groupe vient d'une règle active ou d'un même point d'impact. Chaque membre est comparé, et il est **exclu** dans les cas suivants : déjà décidé, exception, collision, mauvais commit, sans proposition individuelle, proposition contraire ou indéterminée, références invalides.
+  - Le lot enregistre une décision par membre coché, marquée « lot » avec sa règle et sa version.
+  - Un commentaire partagé ne cite pas de ligne de code.
+  - « Annuler le lot » épargne les membres modifiés depuis.
+- **Mesures** : décisions individuelles ou par lot, propositions acceptées ou corrigées, vrais problèmes proposés « Not an issue », abstentions, références invalides, jeu de référence, décisions par heure active. Toujours avec les effectifs.
+
 ## Agent d'analyse (OpenCode + GLM)
 
 L'agent **propose** une analyse argumentée pour chaque finding. Vous restez seul à décider.

@@ -17,10 +17,12 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from paladin import rules as rules_mod
 from paladin import store
 from paladin.analysis import excerpt_for_finding, safe_repo_file
 from paladin.classify import FAMILIES, ROUTE_CHECKLIST
 from paladin.contracts import AgentProposal
+from paladin.review import memory
 from paladin.util import loads
 
 MAX_READ_LINES = 300
@@ -41,25 +43,6 @@ class ContextError(LookupError):
 
 def _repos(conn: sqlite3.Connection, campaign_id: str) -> dict[str, dict[str, Any]]:
     return {r["name"]: r for r in store.list_repos(conn, campaign_id)}
-
-
-def precedents(conn: sqlite3.Connection, finding: sqlite3.Row, limit: int = 3) -> list[dict[str, Any]]:
-    """Décisions humaines validées sur des findings proches (même règle ou même famille, même application)."""
-    rows = conn.execute(
-        "SELECT f.source_id, f.category, f.primary_rule_id, f.normalized_path, f.line_number, e.verdict, e.comment,"
-        " e.action FROM finding f JOIN decision_event e ON e.id = f.current_decision_id"
-        " WHERE f.campaign_id = ? AND f.id != ? AND e.verdict IS NOT NULL"
-        " AND (f.primary_rule_id = ? OR f.family = ?) ORDER BY (f.primary_rule_id = ?) DESC, e.created_at DESC LIMIT ?",
-        (
-            finding["campaign_id"],
-            finding["id"],
-            finding["primary_rule_id"],
-            finding["family"],
-            finding["primary_rule_id"],
-            limit,
-        ),
-    ).fetchall()
-    return [dict(r) for r in rows]
 
 
 def build_context(conn: sqlite3.Connection, job: dict[str, Any]) -> dict[str, Any]:
@@ -117,8 +100,34 @@ def build_context(conn: sqlite3.Connection, job: dict[str, Any]) -> dict[str, An
             "focus_line": finding["line_number"],
         },
         "allowed_repos": sorted(repos),
-        "precedents": precedents(conn, finding),
-        "rules": [],
+        "precedents": [
+            {
+                k: p[k]
+                for k in (
+                    "source_id",
+                    "category",
+                    "primary_rule_id",
+                    "normalized_path",
+                    "line_number",
+                    "verdict",
+                    "comment",
+                    "basis",
+                )
+            }
+            for p in memory.precedents(conn, finding, limit=3, include_reference=False)["items"]
+        ],
+        "rules": [
+            {
+                "rule_id": r.id,
+                "version": r.version,
+                "title": r.title,
+                "conditions": r.conditions,
+                "verdict_validated": r.verdict,
+                "exceptions": r.exceptions,
+                "note": "Règle validée par l'analyste : vérifier que ses conditions s'appliquent vraiment à ce cas.",
+            }
+            for r in rules_mod.applicable(conn, finding, finding["tool_label"])
+        ],
         "response_schema": AgentProposal.model_json_schema(),
         "verdict_values": {
             "TRUE_POSITIVE": "problème réel (Excel : True Positive)",

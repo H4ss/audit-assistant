@@ -48,6 +48,6 @@ Relancer ensuite `Paladin.cmd` : il ouvre votre campagne au lieu de la démo. Vo
 ## En savoir plus
 
 - [Guide complet](docs/GUIDE.md) : commandes, formats d'entrée, export, dépannage.
-- [Limites connues](docs/LIMITS.md) · [Avancement](docs/BACKLOG.md) · [Architecture](docs/ARCHITECTURE.md) · [Spécification](SPECS_ASSISTANT_TRIAGE_APPSEC.md)
+- [Rapport de recette](docs/RECETTE.md) · [Limites connues](docs/LIMITS.md) · [Avancement](docs/BACKLOG.md) · [Architecture](docs/ARCHITECTURE.md) · [Spécification](SPECS_ASSISTANT_TRIAGE_APPSEC.md)
 
 **État** : revue, imports, export et agent d'analyse fonctionnent. La chaîne réelle OpenCode + GLM 5.3 (via OpenRouter) a été **vérifiée sur Linux**. Elle reste **à vérifier sur le PC de travail** (Windows, fournisseur de l'entreprise), tout comme la connexion Fortify réelle. La démo affiche des propositions **simulées**, signalées comme telles.

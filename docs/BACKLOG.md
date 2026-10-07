@@ -32,7 +32,7 @@ Jobs à bail, API agent, plugin OpenCode V2, runner avec budget mesuré, sondage
 | P4-7 | Checklist vivante « Prêt pour le travail ? » + `docs/PC_DE_TRAVAIL.md` | done | `test_readiness…`, `test_web_travail.py` |
 | P4-8 | SSC fictif pour la démo et les tests | done | — |
 
-## P5 — Nouvel outil et rapprochement inter-outils — `done` (en attente de check)
+## P5 — Nouvel outil et rapprochement inter-outils — `done` (v0.5.0)
 
 | ID | Tâche | État | Recette |
 |---|---|---|---|
@@ -45,8 +45,18 @@ Jobs à bail, API agent, plugin OpenCode V2, runner avec budget mesuré, sondage
 | P5-7 | Export des colonnes comparatives (valeurs humaines protégées, manifeste avec liens, périmé après annulation), ajout explicite des colonnes manquantes | done | `test_export_writes_comparative…`, `test_human_value…`, `test_missing_comparative…` |
 | P5-8 | Interface : page « Rapprochement », vue côte à côte avec raccourcis, page « Nouvel onglet » | done | `test_web_match.py` |
 
-## P6 — Mémoire, règles, lots — `todo`
-Précédents, règles proposées/validées/révoquées, groupes avec comparaison par membre, lots figés, annulation de lot, réexamen.
+## P6 — Mémoire, règles, lots — `done` (en attente de check)
+
+| ID | Tâche | État | Recette |
+|---|---|---|---|
+| P6-1 | Précédents (même règle, fichier, famille) avec contradictions ; recherche textuelle | done | `test_precedents…` |
+| P6-2 | Catégorie d'écart sur correction ; jeu de référence jamais montré à l'agent | done | `test_pilot_metrics…`, `test_precedents…hide_reference…` |
+| P6-3 | Règles : conditions vérifiables, portée, exceptions, exemple, contre-exemple ; proposée → active → révoquée ; réexamen des décisions dérivées ; visibles par l'agent sans pouvoir les appliquer | done | `test_rule_*`, `test_revoking_a_rule…` |
+| P6-4 | Groupes (règle, même point d'impact), comparaison membre par membre, exclusions motivées | done | `test_group_members…` |
+| P6-5 | Lots : liste figée, une décision par membre (autorité « lot », règle/version), commentaire partagé sans référence de ligne, annulation sans toucher les membres modifiés | done | `test_batch…`, `test_frozen_list…`, `test_undo_batch…` |
+| P6-6 | Mauvais commit : alerte sur la fiche et exclusion des lots | done | `test_wrong_commit…` |
+| P6-7 | Mesures du pilote (section 17) avec effectifs | done | `test_pilot_metrics…` |
+| P6-8 | Recette finale de la tranche (section 24.5) et `docs/RECETTE.md` | done | `test_slice_acceptance_end_to_end` |
 
 ## Hors de portée de ce poste (Étapes B/C)
 - Diagnostic Fortify sur l'instance réelle (endpoints, champs, `release`) — PC de travail.

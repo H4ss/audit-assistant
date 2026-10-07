@@ -45,7 +45,8 @@
 | `agent/` | Jobs avec bail, API agent, outils OpenCode, skill | P3 |
 | `matching.py` | Candidats, décisions de lien, lots, projections `Found in` / `criticality in` | P5 |
 | `excel/sheets.py`, `excel/template.py` | Schéma d'onglet pour un nouvel outil, classeur neuf | P5 / P4 |
-| `rules/` | Mémoire, règles, groupes et lots | P6 |
+| `rules.py`, `groups.py` | Règles réutilisables, groupes comparés membre par membre, lots | P6 |
+| `review/memory.py` | Précédents, recherche, mesures du pilote | P6 |
 
 ## Invariants
 

@@ -92,6 +92,15 @@
 </section>
 
 <section class="panel">
+  <h2>5. Mémoire, règles et lots</h2>
+  <div class="actions">
+    <a class="btn" href="/c/{{ campaign.id }}/rules">Règles</a>
+    <a class="btn" href="/c/{{ campaign.id }}/groups">Groupes et lots</a>
+    <a class="btn" href="/c/{{ campaign.id }}/stats">Mesures et recherche</a>
+  </div>
+</section>
+
+<section class="panel">
   <h2>Dernière décision</h2>
   {% if last_decided %}
   <form method="post" action="/c/{{ campaign.id }}/undo" class="row">

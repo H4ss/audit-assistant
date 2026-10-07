@@ -513,6 +513,7 @@ def create_app(settings: Settings) -> FastAPI:
                     analysis_id=analysis["id"] if analysis else None,
                     discussion_required=discussion,
                     discussion_reason=form.get("discussion_reason") or None,
+                    correction_category=None if accepted else (form.get("correction_category") or None),
                 )
                 f = conn.execute("SELECT export_state FROM finding WHERE id = ?", (fid,)).fetchone()
                 _flash(
@@ -829,6 +830,200 @@ def create_app(settings: Settings) -> FastAPI:
             conn, cid, f"Onglet « {proposal.sheet_name} » validé (v{version}). Il sera créé au prochain export.", "ok"
         )
         return RedirectResponse(f"/c/{cid}", status_code=303)
+
+    # ------------------------------------------------- mémoire, règles, groupes, mesures
+
+    @app.post("/c/{cid}/f/{fid}/reference")
+    async def toggle_reference(request: Request, cid: str, fid: str):
+        form = await _form(request)
+        value = 1 if form.get("reference") == "1" else 0
+        conn.execute("UPDATE finding SET is_reference = ? WHERE id = ? AND campaign_id = ?", (value, fid, cid))
+        _flash(
+            conn,
+            cid,
+            "Ajouté au jeu de référence : sa décision ne sera jamais montrée à l'agent."
+            if value
+            else "Retiré du jeu de référence.",
+            "ok",
+        )
+        return RedirectResponse(f"/c/{cid}/f/{fid}?view={form.get('view', 'all')}", status_code=303)
+
+    @app.get("/c/{cid}/rules", response_class=HTMLResponse)
+    def rules_page(request: Request, cid: str, finding: str = ""):
+        from paladin import rules as rules_mod
+
+        campaign = _campaign(cid)
+        draft = None
+        if finding:
+            f = conn.execute(
+                "SELECT f.*, t.label AS tool_label FROM finding f JOIN tool t ON t.id = f.tool_id"
+                " WHERE f.id = ? AND f.campaign_id = ?",
+                (finding, cid),
+            ).fetchone()
+            if f is not None:
+                dec = None
+                if f["current_decision_id"]:
+                    dec = conn.execute(
+                        "SELECT * FROM decision_event WHERE id = ?", (f["current_decision_id"],)
+                    ).fetchone()
+                draft = {
+                    "finding": dict(f),
+                    "decision": dict(dec) if dec else None,
+                    "conditions": rules_mod.conditions_from_finding(f, f["tool_label"]),
+                }
+        all_rules = rules_mod.list_rules(conn, cid)
+        derived = {
+            r.id: conn.execute(
+                "SELECT COUNT(*) FROM finding f JOIN decision_event e ON e.id = f.current_decision_id"
+                " WHERE e.rule_id = ?",
+                (r.id,),
+            ).fetchone()[0]
+            for r in all_rules
+        }
+        return render(
+            request,
+            "rules.html",
+            campaign=campaign,
+            rules=all_rules,
+            draft=draft,
+            derived=derived,
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+        )
+
+    @app.post("/c/{cid}/rules/create")
+    async def rule_create(request: Request, cid: str):
+        from paladin import rules as rules_mod
+
+        form = await _form(request)
+        conditions = {k: form.get(f"cond_{k}", "").strip() for k in rules_mod.CONDITION_KEYS}
+        exceptions = [x.strip() for x in form.get("exceptions", "").split(",") if x.strip()]
+        try:
+            rule = rules_mod.create_from_decision(
+                conn,
+                form.get("finding_id", ""),
+                title=form.get("title", ""),
+                author=AUTHOR,
+                conditions={k: v for k, v in conditions.items() if v},
+                exceptions=exceptions,
+                counter_example=form.get("counter_example") or None,
+                application_scope=form.get("app_scope") == "1",
+            )
+        except rules_mod.RuleError as exc:
+            _flash(conn, cid, str(exc), "warn")
+            return RedirectResponse(f"/c/{cid}/rules?finding={form.get('finding_id', '')}", status_code=303)
+        _flash(conn, cid, f"Règle « {rule.title} » proposée. Elle ne s'appliquera qu'après validation.", "ok")
+        return RedirectResponse(f"/c/{cid}/rules", status_code=303)
+
+    @app.post("/c/{cid}/rules/{rid}/{op}")
+    async def rule_op(request: Request, cid: str, rid: str, op: str):
+        from paladin import rules as rules_mod
+
+        form = await _form(request)
+        try:
+            if op == "validate":
+                rule = rules_mod.validate(conn, rid, AUTHOR)
+                _flash(
+                    conn,
+                    cid,
+                    f"Règle « {rule.title} » active : elle apparaît sur les fiches concernées et peut"
+                    " servir de base à un lot.",
+                    "ok",
+                )
+            elif op == "revoke":
+                n = rules_mod.revoke(conn, rid, AUTHOR, form.get("reason") or "révoquée par l'analyste")
+                _flash(
+                    conn,
+                    cid,
+                    f"Règle révoquée : {n} décision(s) dérivée(s) passée(s) en « réexamen requis »"
+                    " (historique conservé).",
+                    "ok",
+                )
+            else:
+                raise HTTPException(400, "Action inconnue")
+        except rules_mod.RuleError as exc:
+            _flash(conn, cid, str(exc), "warn")
+        return RedirectResponse(f"/c/{cid}/rules", status_code=303)
+
+    @app.get("/c/{cid}/groups", response_class=HTMLResponse)
+    def groups_page(request: Request, cid: str, key: str = ""):
+        from paladin import groups as groups_mod
+
+        campaign = _campaign(cid)
+        all_groups = groups_mod.groups(conn, cid)
+        selected = next((g for g in all_groups if g.key == key), None)
+        return render(
+            request,
+            "groups.html",
+            campaign=campaign,
+            groups=all_groups,
+            selected=selected,
+            history=groups_mod.history(conn, cid),
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+        )
+
+    @app.post("/c/{cid}/groups/batch")
+    async def groups_batch(request: Request, cid: str):
+        from paladin import groups as groups_mod
+
+        form = await request.form()
+        if form.get("token") != ui_token:
+            raise HTTPException(403, "Jeton d'interface invalide : recharger la page.")
+        key = str(form.get("key", ""))
+        frozen = {str(fid): int(str(form.get(f"rev_{fid}", "-1"))) for fid in form.getlist("member")}
+        try:
+            batch_id = groups_mod.execute(
+                conn,
+                cid,
+                key,
+                frozen,
+                verdict=str(form.get("verdict", "")),
+                comment=str(form.get("comment", "")).strip() or None,
+                author=AUTHOR,
+            )
+        except groups_mod.BatchError as exc:
+            _flash(conn, cid, str(exc), "warn")
+            return RedirectResponse(f"/c/{cid}/groups?{urlencode({'key': key})}", status_code=303)
+        _flash(
+            conn,
+            cid,
+            f"Lot {batch_id[:8]} : {len(frozen)} décision(s) enregistrée(s), une par membre, marquées"
+            " « lot ». Annulable depuis l'historique des lots.",
+            "ok",
+        )
+        return RedirectResponse(f"/c/{cid}/groups", status_code=303)
+
+    @app.post("/c/{cid}/batches/{bid}/undo")
+    async def batch_undo(request: Request, cid: str, bid: str):
+        from paladin import groups as groups_mod
+
+        await _form(request)
+        try:
+            report = groups_mod.undo(conn, bid, AUTHOR)
+            details = [f"{k} : {', '.join(v) or '—'}" for k, v in report.items()]
+            _flash(
+                conn, cid, "Lot annulé (historique conservé). Si l'Excel était exporté, il est périmé.", "ok", details
+            )
+        except groups_mod.BatchError as exc:
+            _flash(conn, cid, str(exc), "warn")
+        return RedirectResponse(f"/c/{cid}/groups", status_code=303)
+
+    @app.get("/c/{cid}/stats", response_class=HTMLResponse)
+    def stats_page(request: Request, cid: str, search: str = ""):
+        from paladin.review import memory
+
+        campaign = _campaign(cid)
+        return render(
+            request,
+            "stats.html",
+            campaign=campaign,
+            m=memory.pilot_metrics(conn, cid),
+            search=search,
+            results=memory.search(conn, cid, search) if search.strip() else None,
+            counters=q.counters(conn, cid),
+            flash=_pop_flash(conn, cid),
+        )
 
     @app.post("/c/{cid}/import")
     async def run_import(request: Request, cid: str):

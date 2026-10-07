@@ -89,6 +89,13 @@
       } catch (_) { /* serveur arrêté : rien à signaler */ }
     }, 10000);
 
+    document.querySelectorAll(".use-rule").forEach((b) => b.addEventListener("click", () => {
+      const r = form.querySelector(`input[name=verdict][value=${b.dataset.verdict}]`);
+      if (r) r.checked = true;
+      comment.value = b.dataset.comment;
+      saveDraft();
+    }));
+
     const setVerdict = (v) => { const r = form.querySelector(`input[name=verdict][value=${v}]`); r.checked = true; saveDraft(); };
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && typing(document.activeElement)) { document.activeElement.blur(); return; }
