@@ -85,6 +85,11 @@ _HEADERS: dict[str, set[str]] = {
     },
     "minutes": {"temps", "temps passe", "temps min", "time", "time spent", "duree", "duration", "minutes", "min"},
 }
+_PREFERRED: dict[str, tuple[str, ...]] = {
+    "comment": ("analysis result comment", "justification", "commentaire", "comment", "rationale", "explication"),
+    "file": ("full filename", "fullfilename", "file path", "filepath", "chemin", "fichier", "file", "path"),
+    "category": ("category", "categorie", "fortify category"),
+}
 # Traductions proposées (jamais appliquées sans être montrées) ; « ok », « oui », « non »… restent à préciser.
 _VERDICT_GUESSES: dict[str, str] = {
     **dict.fromkeys(
@@ -273,9 +278,14 @@ def _infer(
     if v_order and (names[v_order[0]] in _HEADERS["verdict"] or v_hits[v_order[0]]):
         j = v_order[0]
         pick("verdict", j, "en-tête reconnu" if names[j] in _HEADERS["verdict"] else f"{v_hits[j]} verdict(s) reconnus")
+    filled = [sum(1 for v in col if _text(v)) for col in columns]
     for role in ("comment", "category", "line", "minutes", "file"):
-        j = next((j for j, n in enumerate(names) if j not in taken and n in _HEADERS[role]), None)
-        if j is not None:
+        # Plusieurs en-têtes possibles (ex. « Comments » du scanner et « Analysis result comment ») : une colonne
+        # remplie passe avant une vide, puis l'en-tête le plus précis.
+        prefer = _PREFERRED.get(role, ())
+        found = [j for j, n in enumerate(names) if j not in taken and n in _HEADERS[role]]
+        if found:
+            j = min(found, key=lambda j: (filled[j] == 0, prefer.index(names[j]) if names[j] in prefer else 99, j))
             pick(role, j, "en-tête reconnu")
     if mapping["file"] is None:
         for j, col in enumerate(columns):

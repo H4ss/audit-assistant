@@ -112,6 +112,26 @@ class ExportResult:
 # ---------------------------------------------------------------------------
 
 
+def _default_key_header(conn: sqlite3.Connection, campaign_id: str, spec: dict[str, Any]) -> str:
+    """En-tête de clé d'un onglet complété : mapping de la source qui lit cet onglet (configuration, sinon profil
+    validé lors de l'import), « ID » à défaut."""
+    reader = next((s for s in spec["sources"] if s["role"] == "inventory"), None) or next(
+        (s for s in spec["sources"] if s.get("path") == "@target" and s["kind"] == "excel"), None
+    )
+    if reader is None:
+        return "ID"
+    declared = reader.get("mapping", {}).get("fields", {}).get("source_id", {}).get("source")
+    if declared:
+        return declared
+    row = conn.execute(
+        "SELECT mapping_json FROM input_profile WHERE campaign_id = ? AND name = ? AND status = 'validated'"
+        " ORDER BY version DESC LIMIT 1",
+        (campaign_id, f"{spec['label']}-excel"),
+    ).fetchone()
+    source = loads(row["mapping_json"], {}).get("fields", {}).get("source_id", {}).get("source") if row else None
+    return source or "ID"
+
+
 def sheet_plans(conn: sqlite3.Connection, campaign: dict[str, Any]) -> tuple[list[SheetPlan], list[str]]:
     """Onglets à écrire et outils sans onglet (qui restent hors export)."""
     plans, without_sheet = [], []
@@ -144,9 +164,7 @@ def sheet_plans(conn: sqlite3.Connection, campaign: dict[str, Any]) -> tuple[lis
             key_header = sheet_cfg.get("key_header", "Instance ID")
         else:
             mode = sheet_cfg.get("mode", "complete_existing")
-            inventory = next((s for s in spec["sources"] if s["role"] == "inventory"), None)
-            default_key = (inventory or {}).get("mapping", {}).get("fields", {}).get("source_id", {}).get("source")
-            key_header = sheet_cfg.get("key_header", default_key or "ID")
+            key_header = sheet_cfg.get("key_header") or _default_key_header(conn, campaign["id"], spec)
         plans.append(
             SheetPlan(tool["id"], spec["label"], tool["sheet_name"], mode, key_header, "source_id", None, extensions)
         )
