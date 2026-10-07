@@ -194,7 +194,10 @@ def record_usage(
     """Consommation mesurée côté client (OpenCode) ; additionnée si plusieurs exécutions."""
     job = get_job(conn, job_id)
     previous = loads(job["usage_json"], {})
-    merged = {k: (previous.get(k) or 0) + (v or 0) for k, v in usage.items() if isinstance(v, int | float)}
+    merged = dict(previous)
+    for k, v in usage.items():
+        if isinstance(v, int | float):
+            merged[k] = (merged.get(k) or 0) + v
     total = (job["cost_usd"] or 0) + (cost_usd or 0) if cost_usd is not None else job["cost_usd"]
     conn.execute(
         "UPDATE job SET usage_json = ?, cost_usd = ?, model_resolved = COALESCE(?, model_resolved) WHERE id = ?",

@@ -13,6 +13,20 @@ from pathlib import Path
 
 import httpx
 
+if not sys.stdin.isatty() and sys.stdin.read() is None:  # comme opencode : lit stdin jusqu'à EOF
+    sys.exit(3)
+if os.environ.get("PWD") and Path(os.environ["PWD"]).resolve() != Path.cwd().resolve():
+    # comme opencode : le projet est cherché dans $PWD
+    print(json.dumps({"type": "error", "error": {"message": 'Agent not found: "paladin-analyst"'}}))
+    sys.exit(1)
+mode = os.environ.get("FAKE_OPENCODE_MODE", "ok")
+if mode in ("probe_ok", "probe_bad"):  # sondage des accès : trace d'outils simulée
+    tools = [("paladin_claim", "completed"), ("bash", "error")]
+    if mode == "probe_bad":
+        tools.append(("bash", "completed"))
+    for name, status in tools:
+        print(json.dumps({"type": "tool_use", "part": {"type": "tool", "tool": name, "state": {"status": status}}}))
+    sys.exit(0)
 conn = json.loads(Path(".paladin/connection.json").read_text(encoding="utf-8"))
 headers = {"Authorization": f"Bearer {conn['token']}"}
 mode = os.environ.get("FAKE_OPENCODE_MODE", "ok")

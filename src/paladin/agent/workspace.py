@@ -4,8 +4,7 @@ Généré dans le dossier de données (`<home>/agent/`), jamais dans la
 configuration OpenCode globale de l'utilisateur, qui reste intacte. Contient :
 
     opencode.json                      modèle, fournisseur, permissions (tout refusé sauf paladin_*)
-    .opencode/package.json             dépendance des outils (@opencode-ai/plugin)
-    .opencode/tools/paladin.ts         outils paladin_* (appellent l'API agent locale)
+    .opencode/plugins/paladin.ts       plugin V2 sans dépendance : outils paladin_* (API agent locale)
     .opencode/agents/paladin-analyst.md
     .opencode/skills/paladin-appsec-triage/SKILL.md
     .paladin/connection.json           URL + jeton d'agent (local, jamais versionné)
@@ -24,7 +23,7 @@ from paladin.util import sha256_bytes
 
 DEFAULT_MODEL = "openrouter/z-ai/glm-5.3"
 TEMPLATE_FILES = (
-    "tools/paladin.ts",
+    "plugins/paladin.ts",
     "agents/paladin-analyst.md",
     "skills/paladin-appsec-triage/SKILL.md",
 )
@@ -86,8 +85,11 @@ def setup(settings: Settings, model: str | None = None) -> list[WorkspaceFile]:
     root = workspace_dir(settings)
     out: list[WorkspaceFile] = []
     _write(root / "opencode.json", json.dumps(opencode_config(model), indent=2) + "\n", out)
-    package = {"private": True, "dependencies": {"@opencode-ai/plugin": "*"}}
-    _write(root / ".opencode" / "package.json", json.dumps(package, indent=2) + "\n", out)
+    # Fichiers d'une version précédente (outils au format OpenCode V1, ignorés par la V2).
+    for stale in (root / ".opencode" / "tools" / "paladin.ts", root / ".opencode" / "package.json"):
+        if stale.exists():
+            stale.unlink()
+            out.append(WorkspaceFile(stale, "supprimé"))
     for rel in TEMPLATE_FILES:
         _write(root / ".opencode" / rel, _template(rel), out)
     _write(root / ".gitignore", ".paladin/\nnode_modules/\n", out)

@@ -247,3 +247,34 @@ def test_runner_respects_budget_and_requires_key(api, monkeypatch):
     )
     assert len(report.outcomes) == 1 and report.spent_usd == pytest.approx(0.08)  # mesuré chez le fournisseur
     assert "plafond" in report.stopped
+
+
+def test_runner_uses_client_cost_when_provider_counter_lags(api, monkeypatch):
+    conn = api["conn"]
+    jobs.enqueue_analysis(conn, "demo", [finding_by_source(conn, "TB-0001")["id"]])
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    monkeypatch.setattr(runner, "openrouter_usage", lambda key: 0.5)  # compteur figé (retard du fournisseur)
+    report = runner.run_agent(
+        api["settings"], conn, "demo", max_jobs=1, budget_usd=1.0, opencode_cmd=FAKE, printer=lambda s: None
+    )
+    assert report.spent_usd == pytest.approx(0.0012)  # coût rapporté par OpenCode, jamais 0 par défaut
+    job = conn.execute("SELECT usage_json FROM job WHERE finding_id = ?", (finding_by_source(conn, "TB-0001")["id"],))
+    assert json.loads(job.fetchone()[0]) == {"input": 1000, "output": 200}  # tokens conservés après le coût
+
+
+def test_workspace_removes_stale_v1_tools(api):
+    root = workspace.workspace_dir(api["settings"])
+    stale = root / ".opencode" / "tools" / "paladin.ts"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("ancien format V1")
+    actions = {f.path.name: f.action for f in workspace.setup(api["settings"])}
+    assert not stale.exists() and actions["paladin.ts"] in ("supprimé", "créé")
+    assert (root / ".opencode" / "plugins" / "paladin.ts").exists()
+
+
+@pytest.mark.parametrize(("mode", "ok"), [("probe_ok", True), ("probe_bad", False)])
+def test_probe_flags_any_forbidden_tool_execution(api, monkeypatch, mode, ok):
+    monkeypatch.setenv("FAKE_OPENCODE_MODE", mode)
+    res = runner.probe_agent(api["settings"], opencode_cmd=FAKE)
+    assert res.ok is ok
+    assert res.forbidden == ([] if ok else ["bash"])  # un refus ("error") n'est pas une exécution
