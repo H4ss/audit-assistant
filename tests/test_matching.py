@@ -230,7 +230,9 @@ def test_human_value_in_comparative_cell_is_preserved(full):
 def test_new_tool_sheet_proposal_validation_and_idempotent_creation(full):
     conn, settings = full["conn"], full["settings"]
     path = target_path(settings, store.get_campaign(conn, "demo"))
-    existing = load_workbook(path, read_only=True).sheetnames
+    wb_ro = load_workbook(path, read_only=True)
+    existing = list(wb_ro.sheetnames)
+    wb_ro.close()  # Windows : un fichier ouvert ne peut pas être remplacé
     prop = sheets.propose(conn, "demo", "ToolC", existing)
     keys = [c.key for c in prop.columns]
     assert keys[0] == "source_id" and "fortify_category" not in keys and "primary_rule_id" not in keys

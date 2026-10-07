@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -42,3 +43,13 @@ def demo(settings, conn):
 
 def finding_by_source(conn, source_id):
     return conn.execute("SELECT * FROM finding WHERE source_id = ?", (source_id,)).fetchone()
+
+
+def pytest_runtest_logreport(report):
+    """En CI GitHub : chaque échec devient une annotation (lisible sans accès aux journaux)."""
+    if report.failed and os.environ.get("GITHUB_ACTIONS"):
+        lines = [ln for ln in str(report.longreprtext).splitlines() if ln.strip()]
+        detail = " | ".join(ln.strip() for ln in lines if ln.lstrip().startswith("E "))[:900] or (
+            lines[-1] if lines else ""
+        )
+        print(f"\n::error title={report.nodeid}::{detail}", flush=True)
